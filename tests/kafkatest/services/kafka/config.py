@@ -41,11 +41,6 @@ class KafkaConfig(dict):
 
     def render(self):
         """Render self as a series of lines key=val\n, and do so in a consistent order. """
-        keys = [k for k in self.keys()]
-        keys.sort()
-
-        s = ""
-        for k in keys:
-            s += "%s=%s\n" % (k, str(self[k]))
-        return s
+        keys = sorted(self.keys())
+        return "".join("%s=%s\n" % (k, str(self[k])) for k in keys)
 

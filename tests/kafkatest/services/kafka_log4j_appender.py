@@ -52,22 +52,26 @@ class KafkaLog4jAppender(KafkaPathResolverMixin, BackgroundThreadService):
         cmd += self.path.script("kafka-run-class.sh", node)
         cmd += " "
         cmd += self.java_class_name()
-        cmd += " --topic %s --broker-list %s" % (self.topic, self.kafka.bootstrap_servers(self.security_protocol))
+        cmd += f" --topic {self.topic} --broker-list {self.kafka.bootstrap_servers(self.security_protocol)}"
+
 
         if self.max_messages > 0:
-            cmd += " --max-messages %s" % str(self.max_messages)
+            cmd += f" --max-messages {str(self.max_messages)}"
         if self.security_protocol != SecurityConfig.PLAINTEXT:
-            cmd += " --security-protocol %s" % str(self.security_protocol)
-        if self.security_protocol == SecurityConfig.SSL or self.security_protocol == SecurityConfig.SASL_SSL:
-            cmd += " --ssl-truststore-location %s" % str(SecurityConfig.TRUSTSTORE_PATH)
-            cmd += " --ssl-truststore-password %s" % str(SecurityConfig.ssl_stores.truststore_passwd)
-        if self.security_protocol == SecurityConfig.SASL_PLAINTEXT or \
-                self.security_protocol == SecurityConfig.SASL_SSL or \
-                self.security_protocol == SecurityConfig.SASL_MECHANISM_GSSAPI or \
-                self.security_protocol == SecurityConfig.SASL_MECHANISM_PLAIN:
-            cmd += " --sasl-kerberos-service-name %s" % str('kafka')
-            cmd += " --client-jaas-conf-path %s" % str(SecurityConfig.JAAS_CONF_PATH)
-            cmd += " --kerb5-conf-path %s" % str(SecurityConfig.KRB5CONF_PATH)
+            cmd += f" --security-protocol {str(self.security_protocol)}"
+        if self.security_protocol in [SecurityConfig.SSL, SecurityConfig.SASL_SSL]:
+            cmd += f" --ssl-truststore-location {str(SecurityConfig.TRUSTSTORE_PATH)}"
+            cmd += f" --ssl-truststore-password {str(SecurityConfig.ssl_stores.truststore_passwd)}"
+
+        if self.security_protocol in [
+            SecurityConfig.SASL_PLAINTEXT,
+            SecurityConfig.SASL_SSL,
+            SecurityConfig.SASL_MECHANISM_GSSAPI,
+            SecurityConfig.SASL_MECHANISM_PLAIN,
+        ]:
+            cmd += ' --sasl-kerberos-service-name kafka'
+            cmd += f" --client-jaas-conf-path {str(SecurityConfig.JAAS_CONF_PATH)}"
+            cmd += f" --kerb5-conf-path {str(SecurityConfig.KRB5CONF_PATH)}"
 
         cmd += " 2>> /mnt/kafka_log4j_appender.log | tee -a /mnt/kafka_log4j_appender.log &"
         return cmd
@@ -76,8 +80,9 @@ class KafkaLog4jAppender(KafkaPathResolverMixin, BackgroundThreadService):
         node.account.kill_java_processes(self.java_class_name(), allow_fail=False)
 
         stopped = self.wait_node(node, timeout_sec=self.stop_timeout_sec)
-        assert stopped, "Node %s: did not stop within the specified timeout of %s seconds" % \
-                        (str(node.account), str(self.stop_timeout_sec))
+        assert (
+            stopped
+        ), f"Node {str(node.account)}: did not stop within the specified timeout of {str(self.stop_timeout_sec)} seconds"
 
     def clean_node(self, node):
         node.account.kill_java_processes(self.java_class_name(), clean_shutdown=False,

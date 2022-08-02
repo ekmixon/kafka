@@ -20,7 +20,9 @@ from setuptools.command.test import test as TestCommand
 
 version = ''
 with open('kafkatest/__init__.py', 'r') as fd:
-    version = re.search(r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]', fd.read(), re.MULTILINE).group(1)
+    version = re.search(
+        r'^__version__\s*=\s*[\'"]([^\'"]*)[\'"]', fd.read(), re.MULTILINE
+    )[1]
 
 
 class PyTest(TestCommand):

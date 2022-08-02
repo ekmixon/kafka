@@ -111,7 +111,7 @@ class StreamsUpgradeTest(Test):
         elif bounce_type == "full":
             self.restart_all_nodes_with(to_version)
         else:
-            raise Exception("Unrecognized bounce_type: " + str(bounce_type))
+            raise Exception(f"Unrecognized bounce_type: {str(bounce_type)}")
 
 
         # shutdown
@@ -195,12 +195,12 @@ class StreamsUpgradeTest(Test):
 
     def get_version_string(self, version):
         if version.startswith("0") or version.startswith("1") \
-          or version.startswith("2.0") or version.startswith("2.1"):
-            return "Kafka version : " + version
+              or version.startswith("2.0") or version.startswith("2.1"):
+            return f"Kafka version : {version}"
         elif "SNAPSHOT" in version:
-            return "Kafka version.*" + self.base_version_number + ".*SNAPSHOT"
+            return f"Kafka version.*{self.base_version_number}.*SNAPSHOT"
         else:
-            return "Kafka version: " + version
+            return f"Kafka version: {version}"
 
     def wait_for_verification(self, processor, message, file, num_lines=1):
         wait_until(lambda: self.verify_from_file(processor, message, file) >= num_lines,
@@ -212,7 +212,7 @@ class StreamsUpgradeTest(Test):
         try:
             return int(result)
         except ValueError:
-            self.logger.warn("Command failed with ValueError: " + result)
+            self.logger.warn(f"Command failed with ValueError: {result}")
             return 0
 
     def set_version(self, processor, version):
@@ -222,7 +222,9 @@ class StreamsUpgradeTest(Test):
             processor.set_version(version)
 
     def purge_state_dir(self, processor):
-        processor.node.account.ssh("rm -rf " + processor.PERSISTENT_ROOT, allow_fail=False)
+        processor.node.account.ssh(
+            f"rm -rf {processor.PERSISTENT_ROOT}", allow_fail=False
+        )
 
     def do_stop_start_bounce(self, processor, upgrade_from, new_version, counter):
         kafka_version_str = self.get_version_string(new_version)
@@ -250,13 +252,13 @@ class StreamsUpgradeTest(Test):
                 second_other_monitor.wait_until(self.processed_msg,
                                                 timeout_sec=60,
                                                 err_msg="Never saw output '%s' on " % self.processed_msg + str(second_other_node.account))
-        node.account.ssh_capture("grep SMOKE-TEST-CLIENT-CLOSED %s" % processor.STDOUT_FILE, allow_fail=False)
+        node.account.ssh_capture(
+            f"grep SMOKE-TEST-CLIENT-CLOSED {processor.STDOUT_FILE}",
+            allow_fail=False,
+        )
 
-        if upgrade_from is None:  # upgrade disabled -- second round of rolling bounces
-            roll_counter = ".1-"  # second round of rolling bounces
-        else:
-            roll_counter = ".0-"  # first  round of rolling bounces
 
+        roll_counter = ".1-" if upgrade_from is None else ".0-"
         self.roll_logs(processor, roll_counter + str(counter))
 
         self.set_version(processor, new_version)
@@ -269,21 +271,34 @@ class StreamsUpgradeTest(Test):
                     with second_other_node.account.monitor_log(second_other_processor.STDOUT_FILE) as second_other_monitor:
                         processor.start_node(processor.node)
 
-                        log_monitor.wait_until(kafka_version_str,
-                                               timeout_sec=60,
-                                               err_msg="Could not detect Kafka Streams version " + new_version + " on " + str(node.account))
+                        log_monitor.wait_until(
+                            kafka_version_str,
+                            timeout_sec=60,
+                            err_msg=f"Could not detect Kafka Streams version {new_version} on {str(node.account)}",
+                        )
+
                         first_other_monitor.wait_until(self.processed_msg,
                                                        timeout_sec=60,
                                                        err_msg="Never saw output '%s' on " % self.processed_msg + str(first_other_node.account))
-                        found = list(first_other_node.account.ssh_capture(grep_metadata_error + first_other_processor.STDERR_FILE, allow_fail=True))
-                        if len(found) > 0:
+                        if found := list(
+                            first_other_node.account.ssh_capture(
+                                grep_metadata_error
+                                + first_other_processor.STDERR_FILE,
+                                allow_fail=True,
+                            )
+                        ):
                             raise Exception("Kafka Streams failed with 'unable to decode subscription data: version=2'")
 
                         second_other_monitor.wait_until(self.processed_msg,
                                                         timeout_sec=60,
                                                         err_msg="Never saw output '%s' on " % self.processed_msg + str(second_other_node.account))
-                        found = list(second_other_node.account.ssh_capture(grep_metadata_error + second_other_processor.STDERR_FILE, allow_fail=True))
-                        if len(found) > 0:
+                        if found := list(
+                            second_other_node.account.ssh_capture(
+                                grep_metadata_error
+                                + second_other_processor.STDERR_FILE,
+                                allow_fail=True,
+                            )
+                        ):
                             raise Exception("Kafka Streams failed with 'unable to decode subscription data: version=2'")
 
                         monitor.wait_until(self.processed_msg,
@@ -291,11 +306,22 @@ class StreamsUpgradeTest(Test):
                                            err_msg="Never saw output '%s' on " % self.processed_msg + str(node.account))
 
     def roll_logs(self, processor, roll_suffix):
-        processor.node.account.ssh("mv " + processor.STDOUT_FILE + " " + processor.STDOUT_FILE + roll_suffix,
-                                   allow_fail=False)
-        processor.node.account.ssh("mv " + processor.STDERR_FILE + " " + processor.STDERR_FILE + roll_suffix,
-                                   allow_fail=False)
-        processor.node.account.ssh("mv " + processor.LOG_FILE + " " + processor.LOG_FILE + roll_suffix,
-                                   allow_fail=False)
-        processor.node.account.ssh("mv " + processor.CONFIG_FILE + " " + processor.CONFIG_FILE + roll_suffix,
-                                   allow_fail=False)
+        processor.node.account.ssh(
+            f"mv {processor.STDOUT_FILE} {processor.STDOUT_FILE}{roll_suffix}",
+            allow_fail=False,
+        )
+
+        processor.node.account.ssh(
+            f"mv {processor.STDERR_FILE} {processor.STDERR_FILE}{roll_suffix}",
+            allow_fail=False,
+        )
+
+        processor.node.account.ssh(
+            f"mv {processor.LOG_FILE} {processor.LOG_FILE}{roll_suffix}",
+            allow_fail=False,
+        )
+
+        processor.node.account.ssh(
+            f"mv {processor.CONFIG_FILE} {processor.CONFIG_FILE}{roll_suffix}",
+            allow_fail=False,
+        )

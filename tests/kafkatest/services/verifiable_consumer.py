@@ -54,28 +54,32 @@ class ConsumerEventHandler(object):
         self.state = ConsumerState.Started
 
     def handle_offsets_committed(self, event, node, logger):
-        if event["success"]:
-            for offset_commit in event["offsets"]:
-                if offset_commit.get("error", "") != "":
-                    logger.debug("%s: Offset commit failed for: %s" % (str(node.account), offset_commit))
-                    continue
+        if not event["success"]:
+            return
+        for offset_commit in event["offsets"]:
+            if offset_commit.get("error", "") != "":
+                logger.debug(f"{str(node.account)}: Offset commit failed for: {offset_commit}")
+                continue
 
-                topic = offset_commit["topic"]
-                partition = offset_commit["partition"]
-                tp = TopicPartition(topic, partition)
-                offset = offset_commit["offset"]
-                assert tp in self.assignment, \
-                    "Committed offsets for partition %s not assigned (current assignment: %s)" % \
-                    (str(tp), str(self.assignment))
-                assert tp in self.position, "No previous position for %s: %s" % (str(tp), event)
-                assert self.position[tp] >= offset, \
+            topic = offset_commit["topic"]
+            partition = offset_commit["partition"]
+            tp = TopicPartition(topic, partition)
+            offset = offset_commit["offset"]
+            assert (
+                tp in self.assignment
+            ), f"Committed offsets for partition {str(tp)} not assigned (current assignment: {str(self.assignment)})"
+
+            assert tp in self.position, f"No previous position for {str(tp)}: {event}"
+            assert self.position[tp] >= offset, \
                     "The committed offset %d was greater than the current position %d for partition %s" % \
                     (offset, self.position[tp], str(tp))
-                self.committed[tp] = offset
+            self.committed[tp] = offset
 
     def handle_records_consumed(self, event, logger):
-        assert self.state == ConsumerState.Joined, \
-            "Consumed records should only be received when joined (current state: %s)" % str(self.state)
+        assert (
+            self.state == ConsumerState.Joined
+        ), f"Consumed records should only be received when joined (current state: {str(self.state)})"
+
 
         for record_batch in event["partitions"]:
             tp = TopicPartition(topic=record_batch["topic"],
@@ -83,20 +87,20 @@ class ConsumerEventHandler(object):
             min_offset = record_batch["minOffset"]
             max_offset = record_batch["maxOffset"]
 
-            assert tp in self.assignment, \
-                "Consumed records for partition %s which is not assigned (current assignment: %s)" % \
-                (str(tp), str(self.assignment))
+            assert (
+                tp in self.assignment
+            ), f"Consumed records for partition {str(tp)} which is not assigned (current assignment: {str(self.assignment)})"
+
             if tp not in self.position or self.position[tp] == min_offset:
                 self.position[tp] = max_offset + 1
             else:
                 msg = "Consumed from an unexpected offset (%d, %d) for partition %s" % \
-                      (self.position.get(tp), min_offset, str(tp))
+                          (self.position.get(tp), min_offset, str(tp))
                 if self.verify_offsets:
                     raise AssertionError(msg)
-                else:
-                    if tp in self.position:
-                        self.position[tp] = max_offset + 1
-                    logger.warn(msg)
+                if tp in self.position:
+                    self.position[tp] = max_offset + 1
+                logger.warn(msg)
         self.total_consumed += event["count"]
 
     def handle_partitions_revoked(self, event):
@@ -124,16 +128,10 @@ class ConsumerEventHandler(object):
         return list(self.assignment)
 
     def current_position(self, tp):
-        if tp in self.position:
-            return self.position[tp]
-        else:
-            return None
+        return self.position[tp] if tp in self.position else None
 
     def last_commit(self, tp):
-        if tp in self.committed:
-            return self.committed[tp]
-        else:
-            return None
+        return self.committed[tp] if tp in self.committed else None
 
 
 class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, BackgroundThreadService):
@@ -206,7 +204,10 @@ class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
                 self.event_handlers[node] = ConsumerEventHandler(node, self.verify_offsets, idx)
             handler = self.event_handlers[node]
 
-        node.account.ssh("mkdir -p %s" % VerifiableConsumer.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(
+            f"mkdir -p {VerifiableConsumer.PERSISTENT_ROOT}", allow_fail=False
+        )
+
 
         # Create and upload log properties
         log_config = self.render('tools_log4j.properties', log_file=VerifiableConsumer.LOG_FILE)
@@ -224,13 +225,17 @@ class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
         # apply group.instance.id to the node for static membership validation
         node.group_instance_id = None
         if self.static_membership:
-            assert node.version >= V_2_3_0, \
-                "Version %s does not support static membership (must be 2.3 or higher)" % str(node.version)
-            node.group_instance_id = self.group_id + "-instance-" + str(idx)
+            assert (
+                node.version >= V_2_3_0
+            ), f"Version {str(node.version)} does not support static membership (must be 2.3 or higher)"
+
+            node.group_instance_id = f"{self.group_id}-instance-{str(idx)}"
 
         if self.assignment_strategy:
-            assert node.version >= V_0_10_0_0, \
-                "Version %s does not setting an assignment strategy (must be 0.10.0 or higher)" % str(node.version)
+            assert (
+                node.version >= V_0_10_0_0
+            ), f"Version {str(node.version)} does not setting an assignment strategy (must be 0.10.0 or higher)"
+
 
         cmd = self.start_cmd(node)
         self.logger.debug("VerifiableConsumer %d command: %s" % (idx, cmd))
@@ -257,20 +262,21 @@ class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
                     elif name == "partitions_assigned":
                         handler.handle_partitions_assigned(event)
                     else:
-                        self.logger.debug("%s: ignoring unknown event: %s" % (str(node.account), event))
+                        self.logger.debug(f"{str(node.account)}: ignoring unknown event: {event}")
 
     def _update_global_position(self, consumed_event, node):
         for consumed_partition in consumed_event["partitions"]:
             tp = TopicPartition(consumed_partition["topic"], consumed_partition["partition"])
-            if tp in self.global_committed:
-                # verify that the position never gets behind the current commit.
-                if self.global_committed[tp] > consumed_partition["minOffset"]:
-                    msg = "Consumed position %d is behind the current committed offset %d for partition %s" % \
+            if (
+                tp in self.global_committed
+                and self.global_committed[tp] > consumed_partition["minOffset"]
+            ):
+                msg = "Consumed position %d is behind the current committed offset %d for partition %s" % \
                           (consumed_partition["minOffset"], self.global_committed[tp], str(tp))
-                    if self.verify_offsets:
-                        raise AssertionError(msg)
-                    else:
-                        self.logger.warn(msg)
+                if self.verify_offsets:
+                    raise AssertionError(msg)
+                else:
+                    self.logger.warn(msg)
 
             # the consumer cannot generally guarantee that the position increases monotonically
             # without gaps in the face of hard failures, so we only log a warning when this happens
@@ -292,36 +298,35 @@ class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
 
     def start_cmd(self, node):
         cmd = ""
-        cmd += "export LOG_DIR=%s;" % VerifiableConsumer.LOG_DIR
-        cmd += " export KAFKA_OPTS=%s;" % self.security_config.kafka_opts
+        cmd += f"export LOG_DIR={VerifiableConsumer.LOG_DIR};"
+        cmd += f" export KAFKA_OPTS={self.security_config.kafka_opts};"
         cmd += " export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%s\"; " % VerifiableConsumer.LOG4J_CONFIG
         cmd += self.impl.exec_cmd(node)
         if self.on_record_consumed:
             cmd += " --verbose"
 
         if node.group_instance_id:
-            cmd += " --group-instance-id %s" % node.group_instance_id
-        elif node.version == V_2_3_0 or node.version == V_2_3_1:
+            cmd += f" --group-instance-id {node.group_instance_id}"
+        elif node.version in [V_2_3_0, V_2_3_1]:
             # In 2.3, --group-instance-id was required, but would be left empty
             # if `None` is passed as the argument value
             cmd += " --group-instance-id None"
 
         if self.assignment_strategy:
-            cmd += " --assignment-strategy %s" % self.assignment_strategy
+            cmd += f" --assignment-strategy {self.assignment_strategy}"
 
         if self.enable_autocommit:
             cmd += " --enable-autocommit "
 
-        cmd += " --reset-policy %s --group-id %s --topic %s --broker-list %s --session-timeout %s" % \
-               (self.reset_policy, self.group_id, self.topic,
-                self.kafka.bootstrap_servers(self.security_config.security_protocol),
-                self.session_timeout_sec*1000)
-               
-        if self.max_messages > 0:
-            cmd += " --max-messages %s" % str(self.max_messages)
+        cmd += f" --reset-policy {self.reset_policy} --group-id {self.group_id} --topic {self.topic} --broker-list {self.kafka.bootstrap_servers(self.security_config.security_protocol)} --session-timeout {self.session_timeout_sec * 1000}"
 
-        cmd += " --consumer.config %s" % VerifiableConsumer.CONFIG_FILE
-        cmd += " 2>> %s | tee -a %s &" % (VerifiableConsumer.STDOUT_CAPTURE, VerifiableConsumer.STDOUT_CAPTURE)
+
+        if self.max_messages > 0:
+            cmd += f" --max-messages {str(self.max_messages)}"
+
+        cmd += f" --consumer.config {VerifiableConsumer.CONFIG_FILE}"
+        cmd += f" 2>> {VerifiableConsumer.STDOUT_CAPTURE} | tee -a {VerifiableConsumer.STDOUT_CAPTURE} &"
+
         return cmd
 
     def pids(self, node):
@@ -332,7 +337,10 @@ class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
         try:
             return json.loads(string)
         except ValueError:
-            self.logger.debug("%s: Could not parse as json: %s" % (str(node.account), str(string)))
+            self.logger.debug(
+                f"{str(node.account)}: Could not parse as json: {str(string)}"
+            )
+
             return None
 
     def stop_all(self):
@@ -351,12 +359,13 @@ class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
         self.kill_node(node, clean_shutdown=clean_shutdown)
 
         stopped = self.wait_node(node, timeout_sec=self.stop_timeout_sec)
-        assert stopped, "Node %s: did not stop within the specified timeout of %s seconds" % \
-                        (str(node.account), str(self.stop_timeout_sec))
+        assert (
+            stopped
+        ), f"Node {str(node.account)}: did not stop within the specified timeout of {str(self.stop_timeout_sec)} seconds"
 
     def clean_node(self, node):
         self.kill_node(node, clean_shutdown=False)
-        node.account.ssh("rm -rf " + self.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(f"rm -rf {self.PERSISTENT_ROOT}", allow_fail=False)
         self.security_config.clean_node(node)
 
     def current_assignment(self):
@@ -365,24 +374,22 @@ class VerifiableConsumer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
 
     def current_position(self, tp):
         with self.lock:
-            if tp in self.global_position:
-                return self.global_position[tp]
-            else:
-                return None
+            return self.global_position[tp] if tp in self.global_position else None
 
     def owner(self, tp):
         with self.lock:
-            for handler in self.event_handlers.values():
-                if tp in handler.current_assignment():
-                    return handler.node
-            return None
+            return next(
+                (
+                    handler.node
+                    for handler in self.event_handlers.values()
+                    if tp in handler.current_assignment()
+                ),
+                None,
+            )
 
     def last_commit(self, tp):
         with self.lock:
-            if tp in self.global_committed:
-                return self.global_committed[tp]
-            else:
-                return None
+            return self.global_committed[tp] if tp in self.global_committed else None
 
     def total_consumed(self):
         with self.lock:

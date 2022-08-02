@@ -110,7 +110,10 @@ class ConnectStandaloneFileTest(Test):
         self.sink.start()
 
         # Generating data on the source node should generate new records and create new output on the sink node
-        self.source.node.account.ssh("echo -e -n " + repr(self.FIRST_INPUT) + " >> " + self.INPUT_FILE)
+        self.source.node.account.ssh(
+            f"echo -e -n {repr(self.FIRST_INPUT)} >> {self.INPUT_FILE}"
+        )
+
         wait_until(lambda: self.validate_output(self.FIRST_INPUT), timeout_sec=60, err_msg="Data added to input file was not seen in the output file in a reasonable amount of time.")
 
         # Restarting both should result in them picking up where they left off,
@@ -118,19 +121,37 @@ class ConnectStandaloneFileTest(Test):
         self.source.restart()
         self.sink.restart()
 
-        self.source.node.account.ssh("echo -e -n " + repr(self.SECOND_INPUT) + " >> " + self.INPUT_FILE)
+        self.source.node.account.ssh(
+            f"echo -e -n {repr(self.SECOND_INPUT)} >> {self.INPUT_FILE}"
+        )
+
         wait_until(lambda: self.validate_output(self.FIRST_INPUT + self.SECOND_INPUT), timeout_sec=60, err_msg="Sink output file never converged to the same state as the input file")
 
         # Validate the format of the data in the Kafka topic
         self.consumer_validator.run()
-        expected = json.dumps([line if not self.schemas else { "schema": self.SCHEMA, "payload": line } for line in self.FIRST_INPUT_LIST + self.SECOND_INPUT_LIST])
+        expected = json.dumps(
+            [
+                {"schema": self.SCHEMA, "payload": line} if self.schemas else line
+                for line in self.FIRST_INPUT_LIST + self.SECOND_INPUT_LIST
+            ]
+        )
+
         decoder = (json.loads if converter.endswith("JsonConverter") else str)
         actual = json.dumps([decoder(x) for x in self.consumer_validator.messages_consumed[1]])
-        assert expected == actual, "Expected %s but saw %s in Kafka" % (expected, actual)
+        assert expected == actual, f"Expected {expected} but saw {actual} in Kafka"
 
     def validate_output(self, value):
         try:
-            output_hash = list(self.sink.node.account.ssh_capture("md5sum " + self.OUTPUT_FILE))[0].strip().split()[0]
+            output_hash = (
+                list(
+                    self.sink.node.account.ssh_capture(
+                        f"md5sum {self.OUTPUT_FILE}"
+                    )
+                )[0]
+                .strip()
+                .split()[0]
+            )
+
             return output_hash == hashlib.md5(value.encode('utf-8')).hexdigest()
         except RemoteCommandError:
             return False
@@ -148,7 +169,7 @@ class ConnectStandaloneFileTest(Test):
         successful_records = []
         faulty_records = []
         records = []
-        for i in range(0, 1000):
+        for i in range(1000):
             if i % 2 == 0:
                 records.append('{"some_key":' + str(i) + '}')
                 successful_records.append('{some_key=' + str(i) + '}')
@@ -187,7 +208,10 @@ class ConnectStandaloneFileTest(Test):
         self.sink.start()
 
         # Generating data on the source node should generate new records and create new output on the sink node
-        self.source.node.account.ssh("echo -e -n " + repr(records) + " >> " + self.INPUT_FILE)
+        self.source.node.account.ssh(
+            f"echo -e -n {repr(records)} >> {self.INPUT_FILE}"
+        )
+
 
         if error_tolerance == ErrorTolerance.NONE:
             try:
@@ -206,4 +230,6 @@ class ConnectStandaloneFileTest(Test):
                                                  consumer_timeout_ms=10000)
             consumer_validator.run()
             actual = ",".join(consumer_validator.messages_consumed[1])
-            assert faulty_records == actual, "Expected %s but saw %s in dead letter queue" % (faulty_records, actual)
+            assert (
+                faulty_records == actual
+            ), f"Expected {faulty_records} but saw {actual} in dead letter queue"

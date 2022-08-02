@@ -31,9 +31,19 @@ class TestBounce(Test):
 
         quorum_size_arg_name = 'quorum_size'
         default_quorum_size = 1
-        quorum_size = default_quorum_size if not test_context.injected_args else test_context.injected_args.get(quorum_size_arg_name, default_quorum_size)
+        quorum_size = (
+            test_context.injected_args.get(
+                quorum_size_arg_name, default_quorum_size
+            )
+            if test_context.injected_args
+            else default_quorum_size
+        )
+
         if quorum_size < 1:
-            raise Exception("Illegal %s value provided for the test: %s" % (quorum_size_arg_name, quorum_size))
+            raise Exception(
+                f"Illegal {quorum_size_arg_name} value provided for the test: {quorum_size}"
+            )
+
         self.topic = "topic"
         self.zk = ZookeeperService(test_context, num_nodes=quorum_size) if quorum.for_test(test_context) == quorum.zk else None
         num_kafka_nodes = quorum_size if quorum.for_test(test_context) == quorum.colocated_kraft else 1

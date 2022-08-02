@@ -59,13 +59,11 @@ class ZooKeeperSecurityUpgradeTest(ProduceConsumeValidateTest):
 
     @property
     def no_sasl(self):
-        return self.kafka.security_protocol == "PLAINTEXT" or self.kafka.security_protocol == "SSL"
+        return self.kafka.security_protocol in ["PLAINTEXT", "SSL"]
 
     @property
     def is_secure(self):
-        return self.kafka.security_protocol == "SASL_PLAINTEXT" \
-               or self.kafka.security_protocol == "SSL" \
-               or self.kafka.security_protocol == "SASL_SSL"
+        return self.kafka.security_protocol in ["SASL_PLAINTEXT", "SSL", "SASL_SSL"]
 
     def run_zk_migration(self):
         # change zk config (auth provider + jaas login)

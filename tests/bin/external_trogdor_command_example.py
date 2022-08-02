@@ -28,8 +28,10 @@ if __name__ == '__main__':
     line = sys.stdin.readline()
     start_message = json.loads(line)
     workload = start_message["workload"]
-    print("Starting external_trogdor_command_example with task id %s, workload %s"
-          % (start_message["id"], workload))
+    print(
+        f'Starting external_trogdor_command_example with task id {start_message["id"]}, workload {workload}'
+    )
+
     sys.stdout.flush()
 
     # pretend to start some workload
@@ -37,5 +39,5 @@ if __name__ == '__main__':
     sys.stdout.flush()
     time.sleep(0.001 * workload["delayMs"])
 
-    print(json.dumps({"status": "exiting after %s delayMs" % workload["delayMs"]}))
+    print(json.dumps({"status": f'exiting after {workload["delayMs"]} delayMs'}))
     sys.stdout.flush()

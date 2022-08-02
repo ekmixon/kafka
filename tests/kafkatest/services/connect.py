@@ -82,7 +82,7 @@ class ConnectServiceBase(KafkaPathResolverMixin, Service):
     def pids(self, node):
         """Return process ids for Kafka Connect processes."""
         try:
-            return [pid for pid in node.account.ssh_capture("cat " + self.PID_FILE, callback=int)]
+            return list(node.account.ssh_capture(f"cat {self.PID_FILE}", callback=int))
         except:
             return []
 
@@ -130,24 +130,36 @@ class ConnectServiceBase(KafkaPathResolverMixin, Service):
     def start_and_wait_to_load_plugins(self, node, worker_type, remote_connector_configs):
         with node.account.monitor_log(self.LOG_FILE) as monitor:
             self.start_and_return_immediately(node, worker_type, remote_connector_configs)
-            monitor.wait_until('Kafka version', timeout_sec=self.startup_timeout_sec,
-                               err_msg="Never saw message indicating Kafka Connect finished startup on node: " +
-                                       "%s in condition mode: %s" % (str(node.account), self.startup_mode))
+            monitor.wait_until(
+                'Kafka version',
+                timeout_sec=self.startup_timeout_sec,
+                err_msg=(
+                    "Never saw message indicating Kafka Connect finished startup on node: "
+                    + f"{str(node.account)} in condition mode: {self.startup_mode}"
+                ),
+            )
 
     def start_and_wait_to_start_listening(self, node, worker_type, remote_connector_configs):
         self.start_and_return_immediately(node, worker_type, remote_connector_configs)
-        wait_until(lambda: self.listening(node), timeout_sec=self.startup_timeout_sec,
-                   err_msg="Kafka Connect failed to start on node: %s in condition mode: %s" %
-                   (str(node.account), self.startup_mode))
+        wait_until(
+            lambda: self.listening(node),
+            timeout_sec=self.startup_timeout_sec,
+            err_msg=f"Kafka Connect failed to start on node: {str(node.account)} in condition mode: {self.startup_mode}",
+        )
 
     def start_and_wait_to_join_group(self, node, worker_type, remote_connector_configs):
         if worker_type != 'distributed':
-            raise RuntimeError("Cannot wait for joined group message for %s" % worker_type)
+            raise RuntimeError(f"Cannot wait for joined group message for {worker_type}")
         with node.account.monitor_log(self.LOG_FILE) as monitor:
             self.start_and_return_immediately(node, worker_type, remote_connector_configs)
-            monitor.wait_until('Joined group', timeout_sec=self.startup_timeout_sec,
-                               err_msg="Never saw message indicating Kafka Connect joined group on node: " +
-                                       "%s in condition mode: %s" % (str(node.account), self.startup_mode))
+            monitor.wait_until(
+                'Joined group',
+                timeout_sec=self.startup_timeout_sec,
+                err_msg=(
+                    "Never saw message indicating Kafka Connect joined group on node: "
+                    + f"{str(node.account)} in condition mode: {self.startup_mode}"
+                ),
+            )
 
     def stop_node(self, node, clean_shutdown=True):
         self.logger.info((clean_shutdown and "Cleanly" or "Forcibly") + " stopping Kafka Connect on " + str(node.account))
@@ -158,15 +170,22 @@ class ConnectServiceBase(KafkaPathResolverMixin, Service):
             node.account.signal(pid, sig, allow_fail=True)
         if clean_shutdown:
             for pid in pids:
-                wait_until(lambda: not node.account.alive(pid), timeout_sec=self.startup_timeout_sec, err_msg="Kafka Connect process on " + str(
-                    node.account) + " took too long to exit")
+                wait_until(
+                    lambda: not node.account.alive(pid),
+                    timeout_sec=self.startup_timeout_sec,
+                    err_msg=(
+                        f"Kafka Connect process on {str(node.account)}"
+                        + " took too long to exit"
+                    ),
+                )
 
-        node.account.ssh("rm -f " + self.PID_FILE, allow_fail=False)
+
+        node.account.ssh(f"rm -f {self.PID_FILE}", allow_fail=False)
 
     def restart(self, clean_shutdown=True):
         # We don't want to do any clean up here, just restart the process.
         for node in self.nodes:
-            self.logger.info("Restarting Kafka Connect on " + str(node.account))
+            self.logger.info(f"Restarting Kafka Connect on {str(node.account)}")
             self.restart_node(node, clean_shutdown)
 
     def restart_node(self, node, clean_shutdown=True):
@@ -177,10 +196,18 @@ class ConnectServiceBase(KafkaPathResolverMixin, Service):
         node.account.kill_process("connect", clean_shutdown=False, allow_fail=True)
         self.security_config.clean_node(node)
         other_files = " ".join(self.config_filenames() + self.files)
-        node.account.ssh("rm -rf -- %s %s" % (ConnectServiceBase.PERSISTENT_ROOT, other_files), allow_fail=False)
+        node.account.ssh(
+            f"rm -rf -- {ConnectServiceBase.PERSISTENT_ROOT} {other_files}",
+            allow_fail=False,
+        )
 
     def config_filenames(self):
-        return [os.path.join(self.PERSISTENT_ROOT, "connect-connector-" + str(idx) + ".properties") for idx, template in enumerate(self.connector_config_templates or [])]
+        return [
+            os.path.join(
+                self.PERSISTENT_ROOT, f"connect-connector-{str(idx)}.properties"
+            )
+            for idx, template in enumerate(self.connector_config_templates or [])
+        ]
 
     def list_connectors(self, node=None, **kwargs):
         return self._rest_with_retry('/connectors', node=node, **kwargs)
@@ -193,47 +220,67 @@ class ConnectServiceBase(KafkaPathResolverMixin, Service):
         return self._rest_with_retry('/connectors', create_request, node=node, method="POST", **kwargs)
 
     def get_connector(self, name, node=None, **kwargs):
-        return self._rest_with_retry('/connectors/' + name, node=node, **kwargs)
+        return self._rest_with_retry(f'/connectors/{name}', node=node, **kwargs)
 
     def get_connector_config(self, name, node=None, **kwargs):
-        return self._rest_with_retry('/connectors/' + name + '/config', node=node, **kwargs)
+        return self._rest_with_retry(f'/connectors/{name}/config', node=node, **kwargs)
 
     def set_connector_config(self, name, config, node=None, **kwargs):
         # Unlike many other calls, a 409 when setting a connector config is expected if the connector already exists.
         # However, we also might see 409s for other reasons (e.g. rebalancing). So we still perform retries at the cost
         # of tests possibly taking longer to ultimately fail. Tests that care about this can explicitly override the
         # number of retries.
-        return self._rest_with_retry('/connectors/' + name + '/config', config, node=node, method="PUT", **kwargs)
+        return self._rest_with_retry(
+            f'/connectors/{name}/config', config, node=node, method="PUT", **kwargs
+        )
 
     def get_connector_tasks(self, name, node=None, **kwargs):
-        return self._rest_with_retry('/connectors/' + name + '/tasks', node=node, **kwargs)
+        return self._rest_with_retry(f'/connectors/{name}/tasks', node=node, **kwargs)
 
     def delete_connector(self, name, node=None, **kwargs):
-        return self._rest_with_retry('/connectors/' + name, node=node, method="DELETE", **kwargs)
+        return self._rest_with_retry(
+            f'/connectors/{name}', node=node, method="DELETE", **kwargs
+        )
 
     def get_connector_status(self, name, node=None):
-        return self._rest('/connectors/' + name + '/status', node=node)
+        return self._rest(f'/connectors/{name}/status', node=node)
 
     def restart_connector(self, name, node=None, **kwargs):
-        return self._rest_with_retry('/connectors/' + name + '/restart', node=node, method="POST", **kwargs)
+        return self._rest_with_retry(
+            f'/connectors/{name}/restart', node=node, method="POST", **kwargs
+        )
 
     def restart_connector_and_tasks(self, name, only_failed, include_tasks, node=None, **kwargs):
-        return self._rest_with_retry('/connectors/' + name + '/restart?onlyFailed=' + only_failed + '&includeTasks=' + include_tasks, node=node, method="POST", **kwargs)
+        return self._rest_with_retry(
+            f'/connectors/{name}/restart?onlyFailed={only_failed}&includeTasks={include_tasks}',
+            node=node,
+            method="POST",
+            **kwargs,
+        )
 
     def restart_task(self, connector_name, task_id, node=None):
-        return self._rest('/connectors/' + connector_name + '/tasks/' + str(task_id) + '/restart', node=node, method="POST")
+        return self._rest(
+            f'/connectors/{connector_name}/tasks/{str(task_id)}/restart',
+            node=node,
+            method="POST",
+        )
 
     def pause_connector(self, name, node=None):
-        return self._rest('/connectors/' + name + '/pause', node=node, method="PUT")
+        return self._rest(f'/connectors/{name}/pause', node=node, method="PUT")
 
     def resume_connector(self, name, node=None):
-        return self._rest('/connectors/' + name + '/resume', node=node, method="PUT")
+        return self._rest(f'/connectors/{name}/resume', node=node, method="PUT")
 
     def list_connector_plugins(self, node=None):
         return self._rest('/connector-plugins/', node=node)
 
     def validate_config(self, connector_type, validate_request, node=None):
-        return self._rest('/connector-plugins/' + connector_type + '/config/validate', validate_request, node=node, method="PUT")
+        return self._rest(
+            f'/connector-plugins/{connector_type}/config/validate',
+            validate_request,
+            node=node,
+            method="PUT",
+        )
 
     def _rest(self, path, body=None, node=None, method="GET"):
         if node is None:
@@ -247,10 +294,7 @@ class ConnectServiceBase(KafkaPathResolverMixin, Service):
         if resp.status_code > 400:
             self.logger.debug("Connect REST API error for %s: %d %s", resp.url, resp.status_code, resp.text)
             raise ConnectRestError(resp.status_code, resp.text, resp.url)
-        if resp.status_code == 204 or resp.status_code == 202:
-            return None
-        else:
-            return resp.json()
+        return None if resp.status_code in [204, 202] else resp.json()
 
     def _rest_with_retry(self, path, body=None, node=None, method="GET", retries=40, retry_backoff=.25):
         """
@@ -258,18 +302,18 @@ class ConnectServiceBase(KafkaPathResolverMixin, Service):
         responses that can occur due to rebalancing or 404 when the connect resources are not initialized yet).
         """
         exception_to_throw = None
-        for i in range(0, retries + 1):
+        for _ in range(retries + 1):
             try:
                 return self._rest(path, body, node, method)
             except ConnectRestError as e:
                 exception_to_throw = e
-                if e.status != 409 and e.status != 404:
+                if exception_to_throw.status not in [409, 404]:
                     break
                 time.sleep(retry_backoff)
         raise exception_to_throw
 
     def _base_url(self, node):
-        return 'http://' + node.account.externally_routable_ip + ':' + str(self.CONNECT_REST_PORT)
+        return f'http://{node.account.externally_routable_ip}:{str(self.CONNECT_REST_PORT)}'
 
     def append_to_environment_variable(self, envvar, value):
         env_opts = self.environment[envvar]
@@ -293,21 +337,22 @@ class ConnectStandaloneService(ConnectServiceBase):
 
     def start_cmd(self, node, connector_configs):
         cmd = "( export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%s\"; " % self.LOG4J_CONFIG_FILE
-        heap_kafka_opts = "-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=%s" % \
-                          self.logs["connect_heap_dump_file"]["path"]
+        heap_kafka_opts = f'-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath={self.logs["connect_heap_dump_file"]["path"]}'
+
         other_kafka_opts = self.security_config.kafka_opts.strip('\"')
 
         cmd += fix_opts_for_new_jvm(node)
         cmd += "export KAFKA_OPTS=\"%s %s\"; " % (heap_kafka_opts, other_kafka_opts)
         for envvar in self.environment:
-            cmd += "export %s=%s; " % (envvar, str(self.environment[envvar]))
-        cmd += "%s %s " % (self.path.script("connect-standalone.sh", node), self.CONFIG_FILE)
+            cmd += f"export {envvar}={str(self.environment[envvar])}; "
+        cmd += f'{self.path.script("connect-standalone.sh", node)} {self.CONFIG_FILE} '
         cmd += " ".join(connector_configs)
-        cmd += " & echo $! >&3 ) 1>> %s 2>> %s 3> %s" % (self.STDOUT_FILE, self.STDERR_FILE, self.PID_FILE)
+        cmd += f" & echo $! >&3 ) 1>> {self.STDOUT_FILE} 2>> {self.STDERR_FILE} 3> {self.PID_FILE}"
+
         return cmd
 
     def start_node(self, node):
-        node.account.ssh("mkdir -p %s" % self.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(f"mkdir -p {self.PERSISTENT_ROOT}", allow_fail=False)
 
         self.security_config.setup_node(node)
         if self.external_config_template_func:
@@ -316,11 +361,17 @@ class ConnectStandaloneService(ConnectServiceBase):
         node.account.create_file(self.LOG4J_CONFIG_FILE, self.render('connect_log4j.properties', log_file=self.LOG_FILE))
         remote_connector_configs = []
         for idx, template in enumerate(self.connector_config_templates):
-            target_file = os.path.join(self.PERSISTENT_ROOT, "connect-connector-" + str(idx) + ".properties")
+            target_file = os.path.join(
+                self.PERSISTENT_ROOT, f"connect-connector-{str(idx)}.properties"
+            )
+
             node.account.create_file(target_file, template)
             remote_connector_configs.append(target_file)
 
-        self.logger.info("Starting Kafka Connect standalone process on " + str(node.account))
+        self.logger.info(
+            f"Starting Kafka Connect standalone process on {str(node.account)}"
+        )
+
         if self.startup_mode == self.STARTUP_MODE_LOAD:
             self.start_and_wait_to_load_plugins(node, 'standalone', remote_connector_configs)
         elif self.startup_mode == self.STARTUP_MODE_INSTANT:
@@ -349,18 +400,20 @@ class ConnectDistributedService(ConnectServiceBase):
     # connector_configs argument is intentionally ignored in distributed service.
     def start_cmd(self, node, connector_configs):
         cmd = "( export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%s\"; " % self.LOG4J_CONFIG_FILE
-        heap_kafka_opts = "-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=%s" % \
-                          self.logs["connect_heap_dump_file"]["path"]
+        heap_kafka_opts = f'-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath={self.logs["connect_heap_dump_file"]["path"]}'
+
         other_kafka_opts = self.security_config.kafka_opts.strip('\"')
         cmd += "export KAFKA_OPTS=\"%s %s\"; " % (heap_kafka_opts, other_kafka_opts)
         for envvar in self.environment:
-            cmd += "export %s=%s; " % (envvar, str(self.environment[envvar]))
-        cmd += "%s %s " % (self.path.script("connect-distributed.sh", node), self.CONFIG_FILE)
-        cmd += " & echo $! >&3 ) 1>> %s 2>> %s 3> %s" % (self.STDOUT_FILE, self.STDERR_FILE, self.PID_FILE)
+            cmd += f"export {envvar}={str(self.environment[envvar])}; "
+        cmd += f'{self.path.script("connect-distributed.sh", node)} {self.CONFIG_FILE} '
+
+        cmd += f" & echo $! >&3 ) 1>> {self.STDOUT_FILE} 2>> {self.STDERR_FILE} 3> {self.PID_FILE}"
+
         return cmd
 
     def start_node(self, node):
-        node.account.ssh("mkdir -p %s" % self.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(f"mkdir -p {self.PERSISTENT_ROOT}", allow_fail=False)
 
         self.security_config.setup_node(node)
         if self.external_config_template_func:
@@ -370,7 +423,10 @@ class ConnectDistributedService(ConnectServiceBase):
         if self.connector_config_templates:
             raise DucktapeError("Config files are not valid in distributed mode, submit connectors via the REST API")
 
-        self.logger.info("Starting Kafka Connect distributed process on " + str(node.account))
+        self.logger.info(
+            f"Starting Kafka Connect distributed process on {str(node.account)}"
+        )
+
         if self.startup_mode == self.STARTUP_MODE_LOAD:
             self.start_and_wait_to_load_plugins(node, 'distributed', '')
         elif self.startup_mode == self.STARTUP_MODE_INSTANT:
@@ -397,7 +453,7 @@ class ConnectRestError(RuntimeError):
         self.url = url
 
     def __unicode__(self):
-        return "Kafka Connect REST call failed: returned " + self.status + " for " + self.url + ". Response: " + self.message
+        return f"Kafka Connect REST call failed: returned {self.status} for {self.url}. Response: {self.message}"
 
 
 class VerifiableConnector(object):
@@ -409,7 +465,7 @@ class VerifiableConnector(object):
         self.logger.info("Collecting messages from log of %s %s", type(self).__name__, self.name)
         records = []
         for node in self.cc.nodes:
-            for line in node.account.ssh_capture('cat ' + self.cc.STDOUT_FILE):
+            for line in node.account.ssh_capture(f'cat {self.cc.STDOUT_FILE}'):
                 try:
                     data = json.loads(line)
                 except ValueError:

@@ -47,7 +47,7 @@ class PluggableConsumerTest(VerifiableConsumerTest):
         wait_until(lambda: len(consumer.alive_nodes()) == len(consumer.nodes),
                    timeout_sec=60,
                    err_msg="Timed out waiting for consumers to start")
-        self.logger.debug("Started: %s" % str(consumer.alive_nodes()))
+        self.logger.debug(f"Started: {str(consumer.alive_nodes())}")
         consumer.stop_all()
 
         self.logger.debug("Waiting for %d nodes to stop" % len(consumer.nodes))

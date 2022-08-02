@@ -53,7 +53,7 @@ class ReplicaScaleTest(Test):
         topics_create_start_time = time.time()
         for i in range(topic_count):
             topic = "replicas_produce_consume_%d" % i
-            print("Creating topic %s" % topic, flush=True)  # Force some stdout for Jenkins
+            print(f"Creating topic {topic}", flush=True)
             topic_cfg = {
                 "topic": topic,
                 "partitions": partition_count,
@@ -108,7 +108,7 @@ class ReplicaScaleTest(Test):
         topics_create_start_time = time.time()
         for i in range(topic_count):
             topic = "topic-%04d" % i
-            print("Creating topic %s" % topic, flush=True)  # Force some stdout for Jenkins
+            print(f"Creating topic {topic}", flush=True)
             topic_cfg = {
                 "topic": topic,
                 "partitions": partition_count,
@@ -128,12 +128,12 @@ class ReplicaScaleTest(Test):
             restart_times.append(broker_bounce_end_time - broker_bounce_start_time)
             self.logger.info("Time to restart %s: %d" % (node.name, broker_bounce_end_time - broker_bounce_start_time))
 
-        self.logger.info("Total time to restart: %s" % sum(restart_times))
+        self.logger.info(f"Total time to restart: {sum(restart_times)}")
 
         delete_start_time = time.time()
         for i in range(topic_count):
             topic = "topic-%04d" % i
-            self.logger.info("Deleting topic %s" % topic)
+            self.logger.info(f"Deleting topic {topic}")
             self.kafka.delete_topic(topic)
         delete_end_time = time.time()
         self.logger.info("Time to delete topics: %d" % (delete_end_time - delete_start_time))

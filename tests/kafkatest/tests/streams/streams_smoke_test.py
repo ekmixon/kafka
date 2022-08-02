@@ -109,4 +109,6 @@ class StreamsSmokeTest(KafkaTest):
         if crash and processing_guarantee == 'at_least_once':
             self.driver.node.account.ssh("grep -E 'SUCCESS|PROCESSED-MORE-THAN-GENERATED' %s" % self.driver.STDOUT_FILE, allow_fail=False)
         else:
-            self.driver.node.account.ssh("grep SUCCESS %s" % self.driver.STDOUT_FILE, allow_fail=False)
+            self.driver.node.account.ssh(
+                f"grep SUCCESS {self.driver.STDOUT_FILE}", allow_fail=False
+            )

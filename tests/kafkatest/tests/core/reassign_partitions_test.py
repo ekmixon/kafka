@@ -80,19 +80,19 @@ class ReassignPartitionsTest(ProduceConsumeValidateTest):
 
     def reassign_partitions(self, bounce_brokers):
         partition_info = self.kafka.parse_describe_topic(self.kafka.describe_topic(self.topic))
-        self.logger.debug("Partitions before reassignment:" + str(partition_info))
+        self.logger.debug(f"Partitions before reassignment:{str(partition_info)}")
 
         # jumble partition assignment in dictionary
         seed = random.randint(0, 2 ** 31 - 1)
-        self.logger.debug("Jumble partition assignment with seed " + str(seed))
+        self.logger.debug(f"Jumble partition assignment with seed {seed}")
         random.seed(seed)
         # The list may still be in order, but that's ok
-        shuffled_list = list(range(0, self.num_partitions))
+        shuffled_list = list(range(self.num_partitions))
         random.shuffle(shuffled_list)
 
-        for i in range(0, self.num_partitions):
+        for i in range(self.num_partitions):
             partition_info["partitions"][i]["partition"] = shuffled_list[i]
-        self.logger.debug("Jumbled partitions: " + str(partition_info))
+        self.logger.debug(f"Jumbled partitions: {str(partition_info)}")
 
         # send reassign partitions command
         self.kafka.execute_reassign_partitions(partition_info)

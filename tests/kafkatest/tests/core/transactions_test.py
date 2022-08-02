@@ -82,7 +82,7 @@ class TransactionsTest(Test):
         wait_until(lambda: seed_producer.num_acked >= num_seed_messages,
                    timeout_sec=seed_timeout_sec,
                    err_msg="Producer failed to produce messages %d in %ds." %\
-                   (self.num_seed_messages, seed_timeout_sec))
+                       (self.num_seed_messages, seed_timeout_sec))
         return seed_producer.acked
 
     def get_messages_from_topic(self, topic, num_messages):
@@ -90,21 +90,29 @@ class TransactionsTest(Test):
         return self.drain_consumer(consumer, num_messages)
 
     def bounce_brokers(self, clean_shutdown):
-       for node in self.kafka.nodes:
+        for node in self.kafka.nodes:
             if clean_shutdown:
                 self.kafka.restart_node(node, clean_shutdown = True)
             else:
                 self.kafka.stop_node(node, clean_shutdown = False)
                 gracePeriodSecs = 5
                 if self.zk:
-                    wait_until(lambda: len(self.kafka.pids(node)) == 0 and not self.kafka.is_registered(node),
-                               timeout_sec=self.kafka.zk_session_timeout + gracePeriodSecs,
-                               err_msg="Failed to see timely deregistration of hard-killed broker %s" % str(node.account))
+                    wait_until(
+                        lambda: len(self.kafka.pids(node)) == 0
+                        and not self.kafka.is_registered(node),
+                        timeout_sec=self.kafka.zk_session_timeout
+                        + gracePeriodSecs,
+                        err_msg=f"Failed to see timely deregistration of hard-killed broker {str(node.account)}",
+                    )
+
                 else:
                     brokerSessionTimeoutSecs = 18
-                    wait_until(lambda: len(self.kafka.pids(node)) == 0,
-                               timeout_sec=brokerSessionTimeoutSecs + gracePeriodSecs,
-                               err_msg="Failed to see timely disappearance of process for hard-killed broker %s" % str(node.account))
+                    wait_until(
+                        lambda: len(self.kafka.pids(node)) == 0,
+                        timeout_sec=brokerSessionTimeoutSecs + gracePeriodSecs,
+                        err_msg=f"Failed to see timely disappearance of process for hard-killed broker {str(node.account)}",
+                    )
+
                     time.sleep(brokerSessionTimeoutSecs + gracePeriodSecs)
                 self.kafka.start_node(node)
 
@@ -137,22 +145,24 @@ class TransactionsTest(Test):
                 wait_until(lambda: copier.progress_percent() >= 20.0,
                            timeout_sec=self.progress_timeout_sec,
                            err_msg="%s : Message copier didn't make enough progress in %ds. Current progress: %s" \
-                           % (copier.transactional_id, self.progress_timeout_sec, str(copier.progress_percent())))
-                self.logger.info("%s - progress: %s" % (copier.transactional_id,
-                                                        str(copier.progress_percent())))
+                               % (copier.transactional_id, self.progress_timeout_sec, str(copier.progress_percent())))
+                self.logger.info(
+                    f"{copier.transactional_id} - progress: {str(copier.progress_percent())}"
+                )
+
                 copier.restart(clean_shutdown)
 
     def create_and_start_copiers(self, input_topic, output_topic, num_copiers, use_group_metadata):
-        copiers = []
-        for i in range(0, num_copiers):
-            copiers.append(self.create_and_start_message_copier(
+        return [
+            self.create_and_start_message_copier(
                 input_topic=input_topic,
                 output_topic=output_topic,
                 input_partition=i,
-                transactional_id="copier-" + str(i),
-                use_group_metadata=use_group_metadata
-            ))
-        return copiers
+                transactional_id=f"copier-{str(i)}",
+                use_group_metadata=use_group_metadata,
+            )
+            for i in range(num_copiers)
+        ]
 
     def start_consumer(self, topic_to_read, group_id):
         consumer = ConsoleConsumer(context=self.test_context,
@@ -165,10 +175,12 @@ class TransactionsTest(Test):
                                    isolation_level="read_committed")
         consumer.start()
         # ensure that the consumer is up.
-        wait_until(lambda: (len(consumer.messages_consumed[1]) > 0) == True,
-                   timeout_sec=60,
-                   err_msg="Consumer failed to consume any messages for %ds" %\
-                   60)
+        wait_until(
+            lambda: len(consumer.messages_consumed[1]) > 0,
+            timeout_sec=60,
+            err_msg="Consumer failed to consume any messages for %ds" % 60,
+        )
+
         return consumer
 
     def drain_consumer(self, consumer, num_messages):
@@ -205,10 +217,7 @@ class TransactionsTest(Test):
                                                 use_group_metadata=use_group_metadata)
         concurrent_consumer = self.start_consumer(output_topic,
                                                   group_id="concurrent_consumer")
-        clean_shutdown = False
-        if failure_mode == "clean_bounce":
-            clean_shutdown = True
-
+        clean_shutdown = failure_mode == "clean_bounce"
         if bounce_target == "brokers":
             self.bounce_brokers(clean_shutdown)
         elif bounce_target == "clients":
@@ -219,7 +228,7 @@ class TransactionsTest(Test):
             wait_until(lambda: copier.is_done,
                        timeout_sec=copier_timeout_sec,
                        err_msg="%s - Failed to copy all messages in  %ds." %\
-                       (copier.transactional_id, copier_timeout_sec))
+                           (copier.transactional_id, copier_timeout_sec))
         self.logger.info("finished copying messages")
 
         return self.drain_consumer(concurrent_consumer, num_messages_to_copy)
@@ -283,12 +292,12 @@ class TransactionsTest(Test):
                                               - len(concurrently_consumed_message_set))
         assert num_dups == 0, "Detected %d duplicates in the output stream" % num_dups
         assert input_message_set == output_message_set, "Input and output message sets are not equal. Num input messages %d. Num output messages %d" %\
-            (len(input_message_set), len(output_message_set))
+                (len(input_message_set), len(output_message_set))
 
         assert num_dups_in_concurrent_consumer == 0, "Detected %d dups in concurrently consumed messages" % num_dups_in_concurrent_consumer
         assert input_message_set == concurrently_consumed_message_set, \
-            "Input and concurrently consumed output message sets are not equal. Num input messages: %d. Num concurrently_consumed_messages: %d" %\
-            (len(input_message_set), len(concurrently_consumed_message_set))
+                "Input and concurrently consumed output message sets are not equal. Num input messages: %d. Num concurrently_consumed_messages: %d" %\
+                (len(input_message_set), len(concurrently_consumed_message_set))
         if check_order:
             assert input_messages == sorted(input_messages), "The seed messages themselves were not in order"
             assert output_messages == input_messages, "Output messages are not in order"

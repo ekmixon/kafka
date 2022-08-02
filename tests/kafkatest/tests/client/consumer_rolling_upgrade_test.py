@@ -34,18 +34,30 @@ class ConsumerRollingUpgradeTest(VerifiableConsumerTest):
 
     def _verify_range_assignment(self, consumer):
         # range assignment should give us two partition sets: (0, 1) and (2, 3)
-        assignment = set([frozenset(partitions) for partitions in consumer.current_assignment().values()])
-        assert assignment == set([
-            frozenset([TopicPartition(self.TOPIC, 0), TopicPartition(self.TOPIC, 1)]),
-            frozenset([TopicPartition(self.TOPIC, 2), TopicPartition(self.TOPIC, 3)])]), \
-            "Mismatched assignment: %s" % assignment
+        assignment = {
+            frozenset(partitions)
+            for partitions in consumer.current_assignment().values()
+        }
+
+        assert assignment == {
+            frozenset(
+                [TopicPartition(self.TOPIC, 0), TopicPartition(self.TOPIC, 1)]
+            ),
+            frozenset(
+                [TopicPartition(self.TOPIC, 2), TopicPartition(self.TOPIC, 3)]
+            ),
+        }, f"Mismatched assignment: {assignment}"
 
     def _verify_roundrobin_assignment(self, consumer):
-        assignment = set([frozenset(x) for x in consumer.current_assignment().values()])
-        assert assignment == set([
-            frozenset([TopicPartition(self.TOPIC, 0), TopicPartition(self.TOPIC, 2)]),
-            frozenset([TopicPartition(self.TOPIC, 1), TopicPartition(self.TOPIC, 3)])]), \
-            "Mismatched assignment: %s" % assignment
+        assignment = {frozenset(x) for x in consumer.current_assignment().values()}
+        assert assignment == {
+            frozenset(
+                [TopicPartition(self.TOPIC, 0), TopicPartition(self.TOPIC, 2)]
+            ),
+            frozenset(
+                [TopicPartition(self.TOPIC, 1), TopicPartition(self.TOPIC, 3)]
+            ),
+        }, f"Mismatched assignment: {assignment}"
 
     @cluster(num_nodes=4)
     @matrix(metadata_quorum=quorum.all_non_upgrade)
@@ -65,7 +77,7 @@ class ConsumerRollingUpgradeTest(VerifiableConsumerTest):
         self._verify_range_assignment(consumer)
 
         # change consumer configuration to prefer round-robin assignment, but still support range assignment
-        consumer.assignment_strategy = self.ROUND_ROBIN + "," + self.RANGE
+        consumer.assignment_strategy = f"{self.ROUND_ROBIN},{self.RANGE}"
 
         # restart one of the nodes and verify that we are still using range assignment
         consumer.stop_node(consumer.nodes[0])

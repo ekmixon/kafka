@@ -31,18 +31,18 @@ REPLICATION_FACTOR = 1
 TOPIC_TEST_NAME = "topic-get-offset-shell-topic-name"
 
 TOPIC_TEST_PATTERN_PREFIX = "topic-get-offset-shell-topic-pattern"
-TOPIC_TEST_PATTERN_PATTERN = TOPIC_TEST_PATTERN_PREFIX + ".*"
-TOPIC_TEST_PATTERN1 = TOPIC_TEST_PATTERN_PREFIX + "1"
-TOPIC_TEST_PATTERN2 = TOPIC_TEST_PATTERN_PREFIX + "2"
+TOPIC_TEST_PATTERN_PATTERN = f"{TOPIC_TEST_PATTERN_PREFIX}.*"
+TOPIC_TEST_PATTERN1 = f"{TOPIC_TEST_PATTERN_PREFIX}1"
+TOPIC_TEST_PATTERN2 = f"{TOPIC_TEST_PATTERN_PREFIX}2"
 
 TOPIC_TEST_PARTITIONS = "topic-get-offset-shell-partitions"
 
 TOPIC_TEST_INTERNAL_FILTER = "topic-get-offset-shell-consumer_offsets"
 
 TOPIC_TEST_TOPIC_PARTITIONS_PREFIX = "topic-get-offset-shell-topic-partitions"
-TOPIC_TEST_TOPIC_PARTITIONS_PATTERN = TOPIC_TEST_TOPIC_PARTITIONS_PREFIX + ".*"
-TOPIC_TEST_TOPIC_PARTITIONS1 = TOPIC_TEST_TOPIC_PARTITIONS_PREFIX + "1"
-TOPIC_TEST_TOPIC_PARTITIONS2 = TOPIC_TEST_TOPIC_PARTITIONS_PREFIX + "2"
+TOPIC_TEST_TOPIC_PARTITIONS_PATTERN = f"{TOPIC_TEST_TOPIC_PARTITIONS_PREFIX}.*"
+TOPIC_TEST_TOPIC_PARTITIONS1 = f"{TOPIC_TEST_TOPIC_PARTITIONS_PREFIX}1"
+TOPIC_TEST_TOPIC_PARTITIONS2 = f"{TOPIC_TEST_TOPIC_PARTITIONS_PREFIX}2"
 
 
 class GetOffsetShellTest(Test):
@@ -171,41 +171,85 @@ class GetOffsetShellTest(Test):
                    timeout_sec=10, err_msg="Timed out waiting to reach expected offset.")
 
         # Assert that a topic pattern with partition range matches all 4 partitions
-        wait_until(lambda: self.check_message_count_sum_equals(2*MAX_MESSAGES, topic_partitions=TOPIC_TEST_TOPIC_PARTITIONS_PATTERN + ":0-2"),
-                   timeout_sec=10, err_msg="Timed out waiting to reach expected offset.")
+        wait_until(
+            lambda: self.check_message_count_sum_equals(
+                2 * MAX_MESSAGES,
+                topic_partitions=f"{TOPIC_TEST_TOPIC_PARTITIONS_PATTERN}:0-2",
+            ),
+            timeout_sec=10,
+            err_msg="Timed out waiting to reach expected offset.",
+        )
+
 
         # Assert that 2 separate topic patterns match all 4 partitions
-        wait_until(lambda: self.check_message_count_sum_equals(2*MAX_MESSAGES, topic_partitions=TOPIC_TEST_TOPIC_PARTITIONS1 + "," + TOPIC_TEST_TOPIC_PARTITIONS2),
-                   timeout_sec=10, err_msg="Timed out waiting to reach expected offset.")
+        wait_until(
+            lambda: self.check_message_count_sum_equals(
+                2 * MAX_MESSAGES,
+                topic_partitions=f"{TOPIC_TEST_TOPIC_PARTITIONS1},{TOPIC_TEST_TOPIC_PARTITIONS2}",
+            ),
+            timeout_sec=10,
+            err_msg="Timed out waiting to reach expected offset.",
+        )
+
 
         # Assert that 4 separate topic-partition patterns match all 4 partitions
-        wait_until(lambda: self.check_message_count_sum_equals(2*MAX_MESSAGES,
-                                                               topic_partitions=TOPIC_TEST_TOPIC_PARTITIONS1 + ":0," +
-                                                                                TOPIC_TEST_TOPIC_PARTITIONS1 + ":1," +
-                                                                                TOPIC_TEST_TOPIC_PARTITIONS2 + ":0," +
-                                                                                TOPIC_TEST_TOPIC_PARTITIONS2 + ":1"),
-                   timeout_sec=10, err_msg="Timed out waiting to reach expected offset.")
+        wait_until(
+            lambda: self.check_message_count_sum_equals(
+                2 * MAX_MESSAGES,
+                topic_partitions=(
+                    (
+                        (
+                            (
+                                (
+                                    (
+                                        f"{TOPIC_TEST_TOPIC_PARTITIONS1}:0,"
+                                        + TOPIC_TEST_TOPIC_PARTITIONS1
+                                    )
+                                    + ":1,"
+                                )
+                                + TOPIC_TEST_TOPIC_PARTITIONS2
+                            )
+                            + ":0,"
+                        )
+                        + TOPIC_TEST_TOPIC_PARTITIONS2
+                    )
+                    + ":1"
+                ),
+            ),
+            timeout_sec=10,
+            err_msg="Timed out waiting to reach expected offset.",
+        )
+
 
         # Assert that only partitions #0 are matched with topic pattern and fix partition number
-        filtered_partitions = self.kafka.get_offset_shell(topic_partitions=TOPIC_TEST_TOPIC_PARTITIONS_PATTERN + ":0")
-        assert 1 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS1, 0))
-        assert 0 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS1, 1))
-        assert 1 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS2, 0))
-        assert 0 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS2, 1))
+        filtered_partitions = self.kafka.get_offset_shell(
+            topic_partitions=f"{TOPIC_TEST_TOPIC_PARTITIONS_PATTERN}:0"
+        )
+
+        assert 1 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS1}:0")
+        assert 0 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS1}:1")
+        assert 1 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS2}:0")
+        assert 0 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS2}:1")
 
         # Assert that only partitions #1 are matched with topic pattern and partition lower bound
-        filtered_partitions = self.kafka.get_offset_shell(topic_partitions=TOPIC_TEST_TOPIC_PARTITIONS_PATTERN + ":1-")
-        assert 1 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS1, 1))
-        assert 0 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS1, 0))
-        assert 1 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS2, 1))
-        assert 0 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS2, 0))
+        filtered_partitions = self.kafka.get_offset_shell(
+            topic_partitions=f"{TOPIC_TEST_TOPIC_PARTITIONS_PATTERN}:1-"
+        )
+
+        assert 1 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS1}:1")
+        assert 0 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS1}:0")
+        assert 1 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS2}:1")
+        assert 0 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS2}:0")
 
         # Assert that only partitions #0 are matched with topic pattern and partition upper bound
-        filtered_partitions = self.kafka.get_offset_shell(topic_partitions=TOPIC_TEST_TOPIC_PARTITIONS_PATTERN + ":-1")
-        assert 1 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS1, 0))
-        assert 0 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS1, 1))
-        assert 1 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS2, 0))
-        assert 0 == filtered_partitions.count("%s:%s" % (TOPIC_TEST_TOPIC_PARTITIONS2, 1))
+        filtered_partitions = self.kafka.get_offset_shell(
+            topic_partitions=f"{TOPIC_TEST_TOPIC_PARTITIONS_PATTERN}:-1"
+        )
+
+        assert 1 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS1}:0")
+        assert 0 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS1}:1")
+        assert 1 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS2}:0")
+        assert 0 == filtered_partitions.count(f"{TOPIC_TEST_TOPIC_PARTITIONS2}:1")
 
     @cluster(num_nodes=4)
     @matrix(metadata_quorum=quorum.all_non_upgrade)

@@ -78,10 +78,12 @@ class ProduceConsumeValidateTest(Test):
         msg = ""
         for node in self.consumer.nodes:
             if not self.consumer.alive(node):
-                msg = "The consumer has terminated, or timed out, on node %s." % str(node.account)
+                msg = f"The consumer has terminated, or timed out, on node {str(node.account)}."
+
         for node in self.producer.nodes:
             if not self.producer.alive(node):
-                msg += "The producer has terminated, or timed out, on node %s." % str(node.account)
+                msg += f"The producer has terminated, or timed out, on node {str(node.account)}."
+
         if len(msg) > 0:
             raise Exception(msg)
 

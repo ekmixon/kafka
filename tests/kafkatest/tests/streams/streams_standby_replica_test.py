@@ -48,12 +48,9 @@ class StreamsStandbyTask(BaseStreamsTest):
     def test_standby_tasks_rebalance(self):
         # TODO KIP-441: consider rewriting the test for HighAvailabilityTaskAssignor
         configs = self.get_configs(
-            ",sourceTopic=%s,sinkTopic1=%s,sinkTopic2=%s,internal.task.assignor.class=org.apache.kafka.streams.processor.internals.assignment.StickyTaskAssignor" % (
-            self.streams_source_topic,
-            self.streams_sink_topic_1,
-            self.streams_sink_topic_2
-            )
+            f",sourceTopic={self.streams_source_topic},sinkTopic1={self.streams_sink_topic_1},sinkTopic2={self.streams_sink_topic_2},internal.task.assignor.class=org.apache.kafka.streams.processor.internals.assignment.StickyTaskAssignor"
         )
+
 
         producer = self.get_producer(self.streams_source_topic, self.num_messages, throughput=15000, repeating_keys=6)
         producer.start()
@@ -117,14 +114,27 @@ class StreamsStandbyTask(BaseStreamsTest):
         self.wait_for_verification(processor_3, "ACTIVE_TASKS:2 STANDBY_TASKS:2", processor_3.STDOUT_FILE)
         self.wait_for_verification(processor_2, "ACTIVE_TASKS:2 STANDBY_TASKS:2", processor_2.STDOUT_FILE, num_lines=2)
 
-        self.assert_consume(self.client_id, "assert all messages consumed from %s" % self.streams_sink_topic_1,
-                            self.streams_sink_topic_1, self.num_messages)
-        self.assert_consume(self.client_id, "assert all messages consumed from %s" % self.streams_sink_topic_2,
-                            self.streams_sink_topic_2, self.num_messages)
+        self.assert_consume(
+            self.client_id,
+            f"assert all messages consumed from {self.streams_sink_topic_1}",
+            self.streams_sink_topic_1,
+            self.num_messages,
+        )
 
-        wait_until(lambda: producer.num_acked >= self.num_messages,
-                   timeout_sec=60,
-                   err_msg="Failed to send all %s messages" % str(self.num_messages))
+        self.assert_consume(
+            self.client_id,
+            f"assert all messages consumed from {self.streams_sink_topic_2}",
+            self.streams_sink_topic_2,
+            self.num_messages,
+        )
+
+
+        wait_until(
+            lambda: producer.num_acked >= self.num_messages,
+            timeout_sec=60,
+            err_msg=f"Failed to send all {str(self.num_messages)} messages",
+        )
+
 
         producer.stop()
 
@@ -142,9 +152,17 @@ class StreamsStandbyTask(BaseStreamsTest):
         processor_3.node.account.ssh(validateMonotonicCheckpointsCmd(processor_3.LOG_FILE, processor_3.STDOUT_FILE))
 
         # Second, check to make sure no invariant violations were reported
-        processor_1.node.account.ssh("! grep ERROR " + processor_1.STDOUT_FILE, allow_fail=False)
-        processor_2.node.account.ssh("! grep ERROR " + processor_2.STDOUT_FILE, allow_fail=False)
-        processor_3.node.account.ssh("! grep ERROR " + processor_3.STDOUT_FILE, allow_fail=False)
+        processor_1.node.account.ssh(
+            f"! grep ERROR {processor_1.STDOUT_FILE}", allow_fail=False
+        )
+
+        processor_2.node.account.ssh(
+            f"! grep ERROR {processor_2.STDOUT_FILE}", allow_fail=False
+        )
+
+        processor_3.node.account.ssh(
+            f"! grep ERROR {processor_3.STDOUT_FILE}", allow_fail=False
+        )
 
 
 def validateMonotonicCheckpointsCmd(log_file, stdout_file):

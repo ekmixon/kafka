@@ -34,9 +34,14 @@ def for_test(test_context):
     # A test uses ZooKeeper if it doesn't specify a metadata quorum or if it explicitly specifies ZooKeeper
     default_quorum_type = zk
     arg_name = 'metadata_quorum'
-    retval = default_quorum_type if not test_context.injected_args else test_context.injected_args.get(arg_name, default_quorum_type)
+    retval = (
+        test_context.injected_args.get(arg_name, default_quorum_type)
+        if test_context.injected_args
+        else default_quorum_type
+    )
+
     if retval not in all:
-        raise Exception("Unknown %s value provided for the test: %s" % (arg_name, retval))
+        raise Exception(f"Unknown {arg_name} value provided for the test: {retval}")
     return retval
 
 class ServiceQuorumInfo:

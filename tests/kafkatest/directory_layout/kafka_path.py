@@ -71,9 +71,7 @@ def create_path_resolver(context, project="kafka"):
     (module_name, resolver_class_name) = resolver_fully_qualified_classname.rsplit('.', 1)
     cluster_mod = importlib.import_module(module_name)
     path_resolver_class = getattr(cluster_mod, resolver_class_name)
-    path_resolver = path_resolver_class(context, project)
-
-    return path_resolver
+    return path_resolver_class(context, project)
 
 
 class KafkaPathResolverMixin(object):
@@ -89,7 +87,10 @@ class KafkaPathResolverMixin(object):
         if not hasattr(self, "_path"):
             setattr(self, "_path", create_path_resolver(self.context, "kafka"))
             if hasattr(self.context, "logger") and self.context.logger is not None:
-                self.context.logger.debug("Using path resolver %s" % self._path.__class__.__name__)
+                self.context.logger.debug(
+                    f"Using path resolver {self._path.__class__.__name__}"
+                )
+
 
         return self._path
 
@@ -110,7 +111,7 @@ class KafkaSystemTestPathResolver(object):
         version = self._version(node_or_version)
         home_dir = project or self.project
         if version is not None:
-            home_dir += "-%s" % str(version)
+            home_dir += f"-{str(version)}"
 
         return os.path.join(KAFKA_INSTALL_ROOT, home_dir)
 

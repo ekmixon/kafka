@@ -44,12 +44,12 @@ class LogCompactionTester(KafkaPathResolverMixin, BackgroundThreadService):
         self.log_compaction_completed = False
 
     def _worker(self, idx, node):
-        node.account.ssh("mkdir -p %s" % LogCompactionTester.OUTPUT_DIR)
+        node.account.ssh(f"mkdir -p {LogCompactionTester.OUTPUT_DIR}")
         cmd = self.start_cmd(node)
         self.logger.info("LogCompactionTester %d command: %s" % (idx, cmd))
         self.security_config.setup_node(node)
         for line in node.account.ssh_capture(cmd):
-            self.logger.debug("Checking line:{}".format(line))
+            self.logger.debug(f"Checking line:{line}")
 
             if line.startswith(LogCompactionTester.VERIFICATION_STRING):
                 self.log_compaction_completed = True
@@ -58,14 +58,17 @@ class LogCompactionTester(KafkaPathResolverMixin, BackgroundThreadService):
         core_libs_jar = self.path.jar(CORE_LIBS_JAR_NAME, DEV_BRANCH)
         core_dependant_test_libs_jar = self.path.jar(CORE_DEPENDANT_TEST_LIBS_JAR_NAME, DEV_BRANCH)
 
-        cmd = "for file in %s; do CLASSPATH=$CLASSPATH:$file; done;" % core_libs_jar
-        cmd += " for file in %s; do CLASSPATH=$CLASSPATH:$file; done;" % core_dependant_test_libs_jar
+        cmd = f"for file in {core_libs_jar}; do CLASSPATH=$CLASSPATH:$file; done;"
+        cmd += f" for file in {core_dependant_test_libs_jar}; do CLASSPATH=$CLASSPATH:$file; done;"
+
         cmd += " export CLASSPATH;"
         cmd += self.path.script("kafka-run-class.sh", node)
-        cmd += " %s" % self.java_class_name()
-        cmd += " --bootstrap-server %s --messages 1000000 --sleep 20 --duplicates 10 --percent-deletes 10" % (self.kafka.bootstrap_servers(self.security_protocol))
+        cmd += f" {self.java_class_name()}"
+        cmd += f" --bootstrap-server {self.kafka.bootstrap_servers(self.security_protocol)} --messages 1000000 --sleep 20 --duplicates 10 --percent-deletes 10"
 
-        cmd += " 2>> %s | tee -a %s &" % (self.logs["tool_logs"]["path"], self.logs["tool_logs"]["path"])
+
+        cmd += f' 2>> {self.logs["tool_logs"]["path"]} | tee -a {self.logs["tool_logs"]["path"]} &'
+
         return cmd
 
     def stop_node(self, node):
@@ -73,13 +76,14 @@ class LogCompactionTester(KafkaPathResolverMixin, BackgroundThreadService):
                                          allow_fail=True)
 
         stopped = self.wait_node(node, timeout_sec=self.stop_timeout_sec)
-        assert stopped, "Node %s: did not stop within the specified timeout of %s seconds" % \
-                        (str(node.account), str(self.stop_timeout_sec))
+        assert (
+            stopped
+        ), f"Node {str(node.account)}: did not stop within the specified timeout of {str(self.stop_timeout_sec)} seconds"
 
     def clean_node(self, node):
         node.account.kill_java_processes(self.java_class_name(), clean_shutdown=False,
                                          allow_fail=True)
-        node.account.ssh("rm -rf %s" % LogCompactionTester.OUTPUT_DIR, allow_fail=False)
+        node.account.ssh(f"rm -rf {LogCompactionTester.OUTPUT_DIR}", allow_fail=False)
 
     def java_class_name(self):
         return "kafka.tools.LogCompactionTester"

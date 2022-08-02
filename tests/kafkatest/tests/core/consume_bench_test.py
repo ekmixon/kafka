@@ -213,6 +213,6 @@ class ConsumeBenchTest(Test):
             raise Exception("Should have raised an exception due to an invalid configuration")
         except RuntimeError as e:
             if expected_error_msg not in str(e):
-                raise RuntimeError("Unexpected Exception - " + str(e))
+                raise RuntimeError(f"Unexpected Exception - {str(e)}")
             self.logger.info(e)
 

@@ -47,13 +47,15 @@ class ReplicaVerificationTool(KafkaPathResolverMixin, BackgroundThreadService):
         self.logger.debug("ReplicaVerificationTool %d command: %s" % (idx, cmd))
         self.security_config.setup_node(node)
         for line in node.account.ssh_capture(cmd):
-            self.logger.debug("Parsing line:{}".format(line))
+            self.logger.debug(f"Parsing line:{line}")
 
-            parsed = re.search('.*max lag is (.+?) for partition ([a-zA-Z0-9._-]+-[0-9]+) at', line)
-            if parsed:
-                lag = int(parsed.group(1))
-                topic_partition = parsed.group(2)
-                self.logger.debug("Setting max lag for {} as {}".format(topic_partition, lag))
+            if parsed := re.search(
+                '.*max lag is (.+?) for partition ([a-zA-Z0-9._-]+-[0-9]+) at',
+                line,
+            ):
+                lag = int(parsed[1])
+                topic_partition = parsed[2]
+                self.logger.debug(f"Setting max lag for {topic_partition} as {lag}")
                 self.partition_lag[topic_partition] = lag
 
     def get_lag_for_partition(self, topic, partition):
@@ -64,16 +66,17 @@ class ReplicaVerificationTool(KafkaPathResolverMixin, BackgroundThreadService):
             topic:          a topic
             partition:      a partition of the topic
         """
-        topic_partition = topic + '-' + str(partition)
+        topic_partition = f'{topic}-{str(partition)}'
         lag = self.partition_lag.get(topic_partition, -1)
-        self.logger.debug("Returning lag for {} as {}".format(topic_partition, lag))
+        self.logger.debug(f"Returning lag for {topic_partition} as {lag}")
 
         return lag
 
     def start_cmd(self, node):
         cmd = self.path.script("kafka-run-class.sh", node)
-        cmd += " %s" % self.java_class_name()
-        cmd += " --broker-list %s --topic-white-list %s --time -2 --report-interval-ms %s" % (self.kafka.bootstrap_servers(self.security_protocol), self.topic, self.report_interval_ms)
+        cmd += f" {self.java_class_name()}"
+        cmd += f" --broker-list {self.kafka.bootstrap_servers(self.security_protocol)} --topic-white-list {self.topic} --time -2 --report-interval-ms {self.report_interval_ms}"
+
 
         cmd += " 2>> /mnt/replica_verification_tool.log | tee -a /mnt/replica_verification_tool.log &"
         return cmd
@@ -83,8 +86,9 @@ class ReplicaVerificationTool(KafkaPathResolverMixin, BackgroundThreadService):
                                          allow_fail=True)
 
         stopped = self.wait_node(node, timeout_sec=self.stop_timeout_sec)
-        assert stopped, "Node %s: did not stop within the specified timeout of %s seconds" % \
-                        (str(node.account), str(self.stop_timeout_sec))
+        assert (
+            stopped
+        ), f"Node {str(node.account)}: did not stop within the specified timeout of {str(self.stop_timeout_sec)} seconds"
 
     def clean_node(self, node):
         node.account.kill_java_processes(self.java_class_name(), clean_shutdown=False,

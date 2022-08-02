@@ -114,14 +114,18 @@ class ConnectDistributedTest(Test):
             return False
 
         tasks = status['tasks']
-        if not tasks:
-            return False
-
-        for task in tasks:
-            if task['id'] == task_id:
-                return task['state'] == state
-
-        return False
+        return (
+            next(
+                (
+                    task['state'] == state
+                    for task in tasks
+                    if task['id'] == task_id
+                ),
+                False,
+            )
+            if tasks
+            else False
+        )
 
     def _all_tasks_have_state(self, status, task_count, state):
         if status is None:
@@ -189,7 +193,7 @@ class ConnectDistributedTest(Test):
             connector = MockSink(self.cc, self.topics.keys(), mode='task-failure', delay_sec=5)
         else:
             connector = MockSource(self.cc, mode='task-failure', delay_sec=5)
-            
+
         connector.start()
 
         task_id = 0
@@ -197,7 +201,7 @@ class ConnectDistributedTest(Test):
                    err_msg="Failed to see task transition to the FAILED state")
 
         self.cc.restart_task(connector.name, task_id)
-        
+
         wait_until(lambda: self.task_is_running(connector, task_id), timeout_sec=10,
                    err_msg="Failed to see task transition to the RUNNING state")
 
@@ -378,12 +382,12 @@ class ConnectDistributedTest(Test):
         self.logger.info("Creating connectors")
         self._start_connector("connect-file-source.properties")
         self._start_connector("connect-file-sink.properties")
-        
+
         # Generating data on the source node should generate new records and create new output on the sink node. Timeouts
         # here need to be more generous than they are for standalone mode because a) it takes longer to write configs,
         # do rebalancing of the group, etc, and b) without explicit leave group support, rebalancing takes awhile
         for node in self.cc.nodes:
-            node.account.ssh("echo -e -n " + repr(self.FIRST_INPUTS) + " >> " + self.INPUT_FILE)
+            node.account.ssh(f"echo -e -n {repr(self.FIRST_INPUTS)} >> {self.INPUT_FILE}")
         wait_until(lambda: self._validate_file_output(self.FIRST_INPUT_LIST), timeout_sec=70, err_msg="Data added to input file was not seen in the output file in a reasonable amount of time.")
 
         # Restarting both should result in them picking up where they left off,
@@ -391,7 +395,7 @@ class ConnectDistributedTest(Test):
         self.cc.restart()
 
         for node in self.cc.nodes:
-            node.account.ssh("echo -e -n " + repr(self.SECOND_INPUTS) + " >> " + self.INPUT_FILE)
+            node.account.ssh(f"echo -e -n {repr(self.SECOND_INPUTS)} >> {self.INPUT_FILE}")
         wait_until(lambda: self._validate_file_output(self.FIRST_INPUT_LIST + self.SECOND_INPUT_LIST), timeout_sec=150, err_msg="Sink output file never converged to the same state as the input file")
 
     @cluster(num_nodes=6)
@@ -472,11 +476,11 @@ class ConnectDistributedTest(Test):
             duplicate_src_seqnos = sorted(seqno for seqno,count in src_seqno_counts.items() if count > 1)
 
             if missing_src_seqnos:
-                self.logger.error("Missing source sequence numbers for task " + str(task))
+                self.logger.error(f"Missing source sequence numbers for task {str(task)}")
                 errors.append("Found missing source sequence numbers for task %d: %s" % (task, missing_src_seqnos))
                 success = False
             if not allow_dups and duplicate_src_seqnos:
-                self.logger.error("Duplicate source sequence numbers for task " + str(task))
+                self.logger.error(f"Duplicate source sequence numbers for task {str(task)}")
                 errors.append("Found duplicate source sequence numbers for task %d: %s" % (task, duplicate_src_seqnos))
                 success = False
 
@@ -492,11 +496,11 @@ class ConnectDistributedTest(Test):
             duplicate_sink_seqnos = sorted(seqno for seqno,count in iter(sink_seqno_counts.items()) if count > 1)
 
             if missing_sink_seqnos:
-                self.logger.error("Missing sink sequence numbers for task " + str(task))
+                self.logger.error(f"Missing sink sequence numbers for task {str(task)}")
                 errors.append("Found missing sink sequence numbers for task %d: %s" % (task, missing_sink_seqnos))
                 success = False
             if not allow_dups and duplicate_sink_seqnos:
-                self.logger.error("Duplicate sink sequence numbers for task " + str(task))
+                self.logger.error(f"Duplicate sink sequence numbers for task {str(task)}")
                 errors.append("Found duplicate sink sequence numbers for task %d: %s" % (task, duplicate_sink_seqnos))
                 success = False
 
@@ -548,7 +552,7 @@ class ConnectDistributedTest(Test):
         wait_until(lambda: self.connector_is_running(source_connector), timeout_sec=30, err_msg='Failed to see connector transition to the RUNNING state')
 
         for node in self.cc.nodes:
-            node.account.ssh("echo -e -n " + repr(self.FIRST_INPUTS) + " >> " + self.INPUT_FILE)
+            node.account.ssh(f"echo -e -n {repr(self.FIRST_INPUTS)} >> {self.INPUT_FILE}")
 
         consumer = ConsoleConsumer(self.test_context, 1, self.kafka, self.TOPIC, consumer_timeout_ms=15000, print_timestamp=True)
         consumer.run()
@@ -623,7 +627,7 @@ class ConnectDistributedTest(Test):
         # here need to be more generous than they are for standalone mode because a) it takes longer to write configs,
         # do rebalancing of the group, etc, and b) without explicit leave group support, rebalancing takes awhile
         for node in self.cc.nodes:
-            node.account.ssh("echo -e -n " + repr(self.FIRST_INPUTS) + " >> " + self.INPUT_FILE)
+            node.account.ssh(f"echo -e -n {repr(self.FIRST_INPUTS)} >> {self.INPUT_FILE}")
         wait_until(lambda: self._validate_file_output(self.FIRST_INPUT_LIST), timeout_sec=70, err_msg="Data added to input file was not seen in the output file in a reasonable amount of time.")
 
     def _validate_file_output(self, input):
@@ -639,6 +643,6 @@ class ConnectDistributedTest(Test):
         try:
             # Convert to a list here or the RemoteCommandError may be returned during a call to the generator instead of
             # immediately
-            return list(node.account.ssh_capture("cat " + file))
+            return list(node.account.ssh_capture(f"cat {file}"))
         except RemoteCommandError:
             return []

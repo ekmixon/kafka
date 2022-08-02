@@ -33,7 +33,7 @@ def broker_node(test, topic, broker_type):
     elif broker_type == "controller":
         node = test.kafka.controller()
     else:
-        raise Exception("Unexpected broker type %s." % (broker_type))
+        raise Exception(f"Unexpected broker type {broker_type}.")
 
     return node
 
@@ -53,23 +53,27 @@ def hard_shutdown(test, topic, broker_type):
 
 def clean_bounce(test, topic, broker_type):
     """Chase the leader of one partition and restart it cleanly a few times (5 times)."""
-    for i in range(5):
+    for _ in range(5):
         prev_broker_node = broker_node(test, topic, broker_type)
         test.kafka.restart_node(prev_broker_node, clean_shutdown=True)
 
 
 def hard_bounce(test, topic, broker_type):
     """Chase the leader and restart it with a hard kill. Do this a few times (5)."""
-    for i in range(5):
+    for _ in range(5):
         prev_broker_node = broker_node(test, topic, broker_type)
         test.kafka.signal_node(prev_broker_node, sig=signal.SIGKILL)
 
         # Since this is a hard kill, we need to make sure the process is down and that
         # zookeeper has registered the loss by expiring the broker's session timeout.
 
-        wait_until(lambda: len(test.kafka.pids(prev_broker_node)) == 0 and not test.kafka.is_registered(prev_broker_node),
-                   timeout_sec=test.kafka.zk_session_timeout + 5,
-                   err_msg="Failed to see timely deregistration of hard-killed broker %s" % str(prev_broker_node.account))
+        wait_until(
+            lambda: len(test.kafka.pids(prev_broker_node)) == 0
+            and not test.kafka.is_registered(prev_broker_node),
+            timeout_sec=test.kafka.zk_session_timeout + 5,
+            err_msg=f"Failed to see timely deregistration of hard-killed broker {str(prev_broker_node.account)}",
+        )
+
 
         test.kafka.start_node(prev_broker_node)
     
@@ -124,24 +128,19 @@ class StreamsBrokerBounceTest(Test):
 
     def fail_many_brokers(self, failure_mode, num_failures):
         sig = signal.SIGTERM
-        if (failure_mode == "clean_shutdown"):
-            sig = signal.SIGTERM
-        else:
-            sig = signal.SIGKILL
-            
-        for num in range(0, num_failures - 1):
+        sig = signal.SIGTERM if (failure_mode == "clean_shutdown") else signal.SIGKILL
+        for num in range(num_failures - 1):
             signal_node(self, self.kafka.nodes[num], sig)
 
     def confirm_topics_on_all_brokers(self, expected_topic_set):
         for node in self.kafka.nodes:
-            match_count = 0
             # need to iterate over topic_list_generator as kafka.list_topics()
             # returns a python generator so values are fetched lazily
             # so we can't just compare directly we must iterate over what's returned
             topic_list_generator = self.kafka.list_topics(node=node)
-            for topic in topic_list_generator:
-                if topic in expected_topic_set:
-                    match_count += 1
+            match_count = sum(
+                topic in expected_topic_set for topic in topic_list_generator
+            )
 
             if len(expected_topic_set) != match_count:
                 return False
@@ -172,7 +171,6 @@ class StreamsBrokerBounceTest(Test):
            self.processor1.start()
 
     def collect_results(self, sleep_time_secs):
-        data = {}
         # End test
         self.driver.wait()
         self.driver.stop()
@@ -180,18 +178,24 @@ class StreamsBrokerBounceTest(Test):
         self.processor1.stop()
 
         node = self.driver.node
-        
+
         # Success is declared if streams does not crash when sleep time > 0
         # It should give an exception when sleep time is 0 since we kill the brokers immediately
         # and the topic manager cannot create internal topics with the desired replication factor
         if (sleep_time_secs == 0):
-            output_streams = self.processor1.node.account.ssh_capture("grep SMOKE-TEST-CLIENT-EXCEPTION %s" % self.processor1.STDOUT_FILE, allow_fail=False)
-        else:
-            output_streams = self.processor1.node.account.ssh_capture("grep SMOKE-TEST-CLIENT-CLOSED %s" % self.processor1.STDOUT_FILE, allow_fail=False)
-            
-        for line in output_streams:
-            data["Client closed"] = line
+            output_streams = self.processor1.node.account.ssh_capture(
+                f"grep SMOKE-TEST-CLIENT-EXCEPTION {self.processor1.STDOUT_FILE}",
+                allow_fail=False,
+            )
 
+        else:
+            output_streams = self.processor1.node.account.ssh_capture(
+                f"grep SMOKE-TEST-CLIENT-CLOSED {self.processor1.STDOUT_FILE}",
+                allow_fail=False,
+            )
+
+
+        data = {"Client closed": line for line in output_streams}
         # Currently it is hard to guarantee anything about Kafka since we don't have exactly once.
         # With exactly once in place, success will be defined as ALL-RECORDS-DELIEVERD and SUCCESS
         output = node.account.ssh_capture("grep -E 'ALL-RECORDS-DELIVERED|PROCESSED-MORE-THAN-GENERATED|PROCESSED-LESS-THAN-GENERATED' %s" % self.driver.STDOUT_FILE, allow_fail=False)
@@ -200,8 +204,8 @@ class StreamsBrokerBounceTest(Test):
         output = node.account.ssh_capture("grep -E 'SUCCESS|FAILURE' %s" % self.driver.STDOUT_FILE, allow_fail=False)
         for line in output:
             data["Logic Success/Failure"] = line
-            
-        
+
+
         return data
 
     @cluster(num_nodes=7)

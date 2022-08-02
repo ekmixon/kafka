@@ -17,7 +17,7 @@
 def file_exists(node, file):
     """Quick and dirty check for existence of remote file."""
     try:
-        node.account.ssh("cat " + file, allow_fail=False)
+        node.account.ssh(f"cat {file}", allow_fail=False)
         return True
     except:
         return False
@@ -25,14 +25,14 @@ def file_exists(node, file):
 def path_exists(node, path):
     """Quick and dirty check for existence of remote path."""
     try:
-        node.account.ssh("ls " + path, allow_fail=False)
+        node.account.ssh(f"ls {path}", allow_fail=False)
         return True
     except:
         return False
 
 def line_count(node, file):
     """Return the line count of file on node"""
-    out = [line for line in node.account.ssh_capture("wc -l %s" % file)]
+    out = list(node.account.ssh_capture(f"wc -l {file}"))
     if len(out) != 1:
         raise Exception("Expected single line of output from wc -l")
 

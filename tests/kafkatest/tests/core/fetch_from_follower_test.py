@@ -104,7 +104,7 @@ class FetchFromFollowerTest(ProduceConsumeValidateTest):
         consumer_idx = self.consumer.idx(consumer_node)
         read_replica_attribute = "preferred-read-replica"
         read_replica_mbean = "kafka.consumer:type=consumer-fetch-manager-metrics,client-id=%s,topic=%s,partition=%d" % \
-                  ("console-consumer", self.topic, 0)
+                      ("console-consumer", self.topic, 0)
         self.jmx_tool.jmx_object_names = [read_replica_mbean]
         self.jmx_tool.jmx_attributes = [read_replica_attribute]
         self.jmx_tool.start_jmx_tool(consumer_idx, consumer_node)
@@ -123,11 +123,14 @@ class FetchFromFollowerTest(ProduceConsumeValidateTest):
                 if k.endswith(read_replica_attribute):
                     all_captured_preferred_read_replicas[int(v)] += 1
 
-        self.logger.debug("Saw the following preferred read replicas %s",
-                          dict(all_captured_preferred_read_replicas.items()))
+        self.logger.debug(
+            "Saw the following preferred read replicas %s",
+            dict(all_captured_preferred_read_replicas),
+        )
+
 
         assert all_captured_preferred_read_replicas[non_leader_idx] > 0, \
-            "Expected to see broker %d (%s) as a preferred replica" % (non_leader_idx, non_leader_rack)
+                "Expected to see broker %d (%s) as a preferred replica" % (non_leader_idx, non_leader_rack)
 
         # Validate consumed messages
         self.stop_producer_and_consumer()

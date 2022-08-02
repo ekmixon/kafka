@@ -79,7 +79,9 @@ class StreamsEosTest(KafkaTest):
         verifier.start()
         verifier.wait()
 
-        verifier.node.account.ssh("grep ALL-RECORDS-DELIVERED %s" % verifier.STDOUT_FILE, allow_fail=False)
+        verifier.node.account.ssh(
+            f"grep ALL-RECORDS-DELIVERED {verifier.STDOUT_FILE}", allow_fail=False
+        )
 
     @cluster(num_nodes=9)
     @parametrize(processing_guarantee="exactly_once")
@@ -125,7 +127,9 @@ class StreamsEosTest(KafkaTest):
         verifier.start()
         verifier.wait()
 
-        verifier.node.account.ssh("grep ALL-RECORDS-DELIVERED %s" % verifier.STDOUT_FILE, allow_fail=False)
+        verifier.node.account.ssh(
+            f"grep ALL-RECORDS-DELIVERED {verifier.STDOUT_FILE}", allow_fail=False
+        )
 
     def add_streams(self, processor):
         with processor.node.account.monitor_log(processor.STDOUT_FILE) as monitor:

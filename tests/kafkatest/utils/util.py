@@ -57,15 +57,22 @@ def is_version(node, version_list, proc_grep_string="kafka", logger=None):
     """Heuristic to check that only the specified version appears in the classpath of the process
     A useful tool to aid in checking that service version apis are working correctly.
     """
-    lines = [l for l in node.account.ssh_capture("ps ax | grep %s | grep -v grep" % proc_grep_string)]
+    lines = list(
+        node.account.ssh_capture(
+            f"ps ax | grep {proc_grep_string} | grep -v grep"
+        )
+    )
+
     assert len(lines) == 1
     psLine = lines[0]
 
     versions = _kafka_jar_versions(psLine)
     r = versions == {str(v) for v in version_list}
     if not r and logger is not None:
-        logger.warning("%s: %s version mismatch: expected %s, actual %s, ps line %s" % \
-                       (str(node), proc_grep_string, version_list, versions, psLine))
+        logger.warning(
+            f"{str(node)}: {proc_grep_string} version mismatch: expected {version_list}, actual {versions}, ps line {psLine}"
+        )
+
     return r
 
 
@@ -77,7 +84,9 @@ def is_int(msg):
     try:
         return int(msg)
     except ValueError:
-        raise Exception("Unexpected message format (expected an integer). Message: %s" % (msg))
+        raise Exception(
+            f"Unexpected message format (expected an integer). Message: {msg}"
+        )
 
 
 def is_int_with_prefix(msg):
@@ -108,27 +117,41 @@ def node_is_reachable(src_node, dst_node):
     :param dst_node:        The destination node to check for reachability to.
     :return:                True only if dst is reachable from src.
     """
-    return 0 == src_node.account.ssh("nc -w 3 -z %s 22" % dst_node.account.hostname, allow_fail=True)
+    return (
+        src_node.account.ssh(
+            f"nc -w 3 -z {dst_node.account.hostname} 22", allow_fail=True
+        )
+        == 0
+    )
 
 
 def annotate_missing_msgs(missing, acked, consumed, msg):
     missing_list = list(missing)
-    msg += "%s acked message did not make it to the Consumer. They are: " %\
-        len(missing_list)
+    msg += f"{len(missing_list)} acked message did not make it to the Consumer. They are: "
+
     if len(missing_list) < 20:
-        msg += str(missing_list) + ". "
+        msg += f"{missing_list}. "
     else:
         msg += ", ".join(str(m) for m in missing_list[:20])
-        msg += "...plus %s more. Total Acked: %s, Total Consumed: %s. " \
-            % (len(missing_list) - 20, len(set(acked)), len(set(consumed)))
+        msg += f"...plus {len(missing_list) - 20} more. Total Acked: {len(set(acked))}, Total Consumed: {len(set(consumed))}. "
+
     return msg
 
 def annotate_data_lost(data_lost, msg, number_validated):
-    print_limit = 10
     if len(data_lost) > 0:
-        msg += "The first %s missing messages were validated to ensure they are in Kafka's data files. " \
-            "%s were missing. This suggests data loss. Here are some of the messages not found in the data files: %s\n" \
-            % (number_validated, len(data_lost), str(data_lost[0:print_limit]) if len(data_lost) > print_limit else str(data_lost))
+        print_limit = 10
+        msg += (
+            "The first %s missing messages were validated to ensure they are in Kafka's data files. "
+            "%s were missing. This suggests data loss. Here are some of the messages not found in the data files: %s\n"
+            % (
+                number_validated,
+                len(data_lost),
+                str(data_lost[:print_limit])
+                if len(data_lost) > print_limit
+                else str(data_lost),
+            )
+        )
+
     else:
         msg += "We validated that the first %s of these missing messages correctly made it into Kafka's data files. " \
             "This suggests they were lost on their way to the consumer." % number_validated
@@ -142,17 +165,17 @@ def validate_delivery(acked, consumed, idempotence_enabled=False, check_lost_dat
     # Correctness of the set difference operation depends on using equivalent
     # message_validators in producer and consumer
     missing = set(acked) - set(consumed)
-    
+
     # Were all acked messages consumed?
     if len(missing) > 0:
         msg = annotate_missing_msgs(missing, acked, consumed, msg)
-        
+
         # Did we miss anything due to data loss?
         if check_lost_data:
             max_truncate_count = 100 if may_truncate_acked_records else 0
             max_validate_count = max(1000, max_truncate_count)
 
-            to_validate = list(missing)[0:min(len(missing), max_validate_count)]
+            to_validate = list(missing)[:min(len(missing), max_validate_count)]
             data_lost = check_lost_data(to_validate)
 
             # With older versions of message format before KIP-101, data loss could occur due to truncation.

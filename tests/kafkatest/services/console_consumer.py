@@ -170,34 +170,35 @@ class ConsoleConsumer(KafkaPathResolverMixin, JmxMixin, BackgroundThreadService)
 
         cmd = fix_opts_for_new_jvm(node)
         cmd += "export JMX_PORT=%(jmx_port)s; " \
-              "export LOG_DIR=%(log_dir)s; " \
-              "export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%(log4j_config)s\"; " \
-              "export KAFKA_OPTS=%(kafka_opts)s; " \
-              "%(console_consumer)s " \
-              "--topic %(topic)s " \
-              "--consumer.config %(config_file)s " % args
+                  "export LOG_DIR=%(log_dir)s; " \
+                  "export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%(log4j_config)s\"; " \
+                  "export KAFKA_OPTS=%(kafka_opts)s; " \
+                  "%(console_consumer)s " \
+                  "--topic %(topic)s " \
+                  "--consumer.config %(config_file)s " % args
 
         if self.new_consumer:
-            assert node.version.consumer_supports_bootstrap_server(), \
-                "new_consumer is only supported if version >= 0.9.0.0, version %s" % str(node.version)
+            assert (
+                node.version.consumer_supports_bootstrap_server()
+            ), f"new_consumer is only supported if version >= 0.9.0.0, version {str(node.version)}"
+
             if node.version <= LATEST_0_10_0:
                 cmd += " --new-consumer"
             cmd += " --bootstrap-server %(broker_list)s" % args
             if node.version >= V_0_11_0_0:
-                cmd += " --isolation-level %s" % self.isolation_level
+                cmd += f" --isolation-level {self.isolation_level}"
         else:
-            assert node.version < V_2_0_0, \
-                "new_consumer==false is only supported if version < 2.0.0, version %s" % str(node.version)
+            assert (
+                node.version < V_2_0_0
+            ), f"new_consumer==false is only supported if version < 2.0.0, version {str(node.version)}"
+
             cmd += " --zookeeper %(zk_connect)s" % args
 
         if self.from_beginning:
             cmd += " --from-beginning"
 
-        if self.consumer_timeout_ms is not None:
-            # version 0.8.X and below do not support --timeout-ms option
-            # This will be added in the properties file instead
-            if node.version > LATEST_0_8_2:
-                cmd += " --timeout-ms %s" % self.consumer_timeout_ms
+        if self.consumer_timeout_ms is not None and node.version > LATEST_0_8_2:
+            cmd += f" --timeout-ms {self.consumer_timeout_ms}"
 
         if self.print_timestamp:
             cmd += " --property print.timestamp=true"
@@ -220,7 +221,7 @@ class ConsoleConsumer(KafkaPathResolverMixin, JmxMixin, BackgroundThreadService)
 
         if self.consumer_properties is not None:
             for k, v in self.consumer_properties.items():
-                cmd += " --consumer-property %s=%s" % (k, v)
+                cmd += f" --consumer-property {k}={v}"
 
         cmd += " 2>> %(stderr)s | tee -a %(stdout)s &" % args
         return cmd
@@ -232,7 +233,10 @@ class ConsoleConsumer(KafkaPathResolverMixin, JmxMixin, BackgroundThreadService)
         return len(self.pids(node)) > 0
 
     def _worker(self, idx, node):
-        node.account.ssh("mkdir -p %s" % ConsoleConsumer.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(
+            f"mkdir -p {ConsoleConsumer.PERSISTENT_ROOT}", allow_fail=False
+        )
+
 
         # Create and upload config file
         self.logger.info("console_consumer.properties:")
@@ -241,11 +245,7 @@ class ConsoleConsumer(KafkaPathResolverMixin, JmxMixin, BackgroundThreadService)
                                                                         jaas_override_variables=self.jaas_override_variables)
         self.security_config.setup_node(node)
 
-        if self.client_prop_file_override:
-            prop_file = self.client_prop_file_override
-        else:
-            prop_file = self.prop_file(node)
-
+        prop_file = self.client_prop_file_override or self.prop_file(node)
         self.logger.info(prop_file)
         node.account.create_file(ConsoleConsumer.CONFIG_FILE, prop_file)
 
@@ -283,11 +283,16 @@ class ConsoleConsumer(KafkaPathResolverMixin, JmxMixin, BackgroundThreadService)
         if self.jmx_object_names is not None:
             raise Exception("'wait_until_partitions_assigned' is not supported while using 'jmx_object_names'/'jmx_attributes'")
         jmx_tool = JmxTool(self.context, jmx_poll_ms=100)
-        jmx_tool.jmx_object_names = ["kafka.consumer:type=consumer-coordinator-metrics,client-id=%s" % self.client_id]
+        jmx_tool.jmx_object_names = [
+            f"kafka.consumer:type=consumer-coordinator-metrics,client-id={self.client_id}"
+        ]
+
         jmx_tool.jmx_attributes = ["assigned-partitions"]
-        jmx_tool.assigned_partitions_jmx_attr = "kafka.consumer:type=consumer-coordinator-metrics,client-id=%s:assigned-partitions" % self.client_id
+        jmx_tool.assigned_partitions_jmx_attr = f"kafka.consumer:type=consumer-coordinator-metrics,client-id={self.client_id}:assigned-partitions"
+
         jmx_tool.start_jmx_tool(self.idx(node), node)
-        assigned_partitions_jmx_attr = "kafka.consumer:type=consumer-coordinator-metrics,client-id=%s:assigned-partitions" % self.client_id
+        assigned_partitions_jmx_attr = f"kafka.consumer:type=consumer-coordinator-metrics,client-id={self.client_id}:assigned-partitions"
+
 
         def read_and_check():
             jmx_tool.read_jmx_output(self.idx(node), node)
@@ -304,21 +309,27 @@ class ConsoleConsumer(KafkaPathResolverMixin, JmxMixin, BackgroundThreadService)
             self._wait_until_partitions_assigned(node)
 
     def stop_node(self, node):
-        self.logger.info("%s Stopping node %s" % (self.__class__.__name__, str(node.account)))
+        self.logger.info(
+            f"{self.__class__.__name__} Stopping node {str(node.account)}"
+        )
+
         node.account.kill_java_processes(self.java_class_name(),
                                          clean_shutdown=True, allow_fail=True)
 
         stopped = self.wait_node(node, timeout_sec=self.stop_timeout_sec)
-        assert stopped, "Node %s: did not stop within the specified timeout of %s seconds" % \
-                        (str(node.account), str(self.stop_timeout_sec))
+        assert (
+            stopped
+        ), f"Node {str(node.account)}: did not stop within the specified timeout of {str(self.stop_timeout_sec)} seconds"
 
     def clean_node(self, node):
         if self.alive(node):
-            self.logger.warn("%s %s was still alive at cleanup time. Killing forcefully..." %
-                             (self.__class__.__name__, node.account))
+            self.logger.warn(
+                f"{self.__class__.__name__} {node.account} was still alive at cleanup time. Killing forcefully..."
+            )
+
         JmxMixin.clean_node(self, node)
         node.account.kill_java_processes(self.java_class_name(), clean_shutdown=False, allow_fail=True)
-        node.account.ssh("rm -rf %s" % ConsoleConsumer.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(f"rm -rf {ConsoleConsumer.PERSISTENT_ROOT}", allow_fail=False)
         self.security_config.clean_node(node)
 
     def java_class_name(self):

@@ -36,7 +36,7 @@ class JmxMixin(object):
         self.jmx_port = 9192
 
         self.started = [False] * num_nodes
-        self.jmx_stats = [{} for x in range(num_nodes)]
+        self.jmx_stats = [{} for _ in range(num_nodes)]
         self.maximum_jmx_value = {}  # map from object_attribute_name to maximum value observed over time
         self.average_jmx_value = {}  # map from object_attribute_name to average value observed over time
 
@@ -49,51 +49,78 @@ class JmxMixin(object):
         if idx is None:
             idx = self.idx(node)
         self.started[idx-1] = False
-        node.account.ssh("rm -f -- %s %s" % (self.jmx_tool_log, self.jmx_tool_err_log), allow_fail=False)
+        node.account.ssh(
+            f"rm -f -- {self.jmx_tool_log} {self.jmx_tool_err_log}",
+            allow_fail=False,
+        )
 
     def start_jmx_tool(self, idx, node):
         if self.jmx_object_names is None:
-            self.logger.debug("%s: Not starting jmx tool because no jmx objects are defined" % node.account)
+            self.logger.debug(
+                f"{node.account}: Not starting jmx tool because no jmx objects are defined"
+            )
+
             return
 
         if self.started[idx-1]:
-            self.logger.debug("%s: jmx tool has been started already on this node" % node.account)
+            self.logger.debug(
+                f"{node.account}: jmx tool has been started already on this node"
+            )
+
             return
 
         # JmxTool is not particularly robust to slow-starting processes. In order to ensure JmxTool doesn't fail if the
         # process we're trying to monitor takes awhile before listening on the JMX port, wait until we can see that port
         # listening before even launching JmxTool
         def check_jmx_port_listening():
-            return 0 == node.account.ssh("nc -z 127.0.0.1 %d" % self.jmx_port, allow_fail=True)
+            return (
+                node.account.ssh(
+                    "nc -z 127.0.0.1 %d" % self.jmx_port, allow_fail=True
+                )
+                == 0
+            )
 
-        wait_until(check_jmx_port_listening, timeout_sec=30, backoff_sec=.1,
-                   err_msg="%s: Never saw JMX port for %s start listening" % (node.account, self))
+
+        wait_until(
+            check_jmx_port_listening,
+            timeout_sec=30,
+            backoff_sec=0.1,
+            err_msg=f"{node.account}: Never saw JMX port for {self} start listening",
+        )
+
 
         # To correctly wait for requested JMX metrics to be added we need the --wait option for JmxTool. This option was
         # not added until 0.11.0.1, so any earlier versions need to use JmxTool from a newer version.
         use_jmxtool_version = get_version(node)
         if use_jmxtool_version <= V_0_11_0_0:
             use_jmxtool_version = DEV_BRANCH
-        cmd = "%s %s " % (self.path.script("kafka-run-class.sh", use_jmxtool_version), self.jmx_class_name())
+        cmd = f'{self.path.script("kafka-run-class.sh", use_jmxtool_version)} {self.jmx_class_name()} '
+
         cmd += "--reporting-interval %d --jmx-url service:jmx:rmi:///jndi/rmi://127.0.0.1:%d/jmxrmi" % (self.jmx_poll_ms, self.jmx_port)
         cmd += " --wait"
         for jmx_object_name in self.jmx_object_names:
-            cmd += " --object-name %s" % jmx_object_name
+            cmd += f" --object-name {jmx_object_name}"
         cmd += " --attributes "
         for jmx_attribute in self.jmx_attributes:
-            cmd += "%s," % jmx_attribute
-        cmd += " 1>> %s" % self.jmx_tool_log
-        cmd += " 2>> %s &" % self.jmx_tool_err_log
+            cmd += f"{jmx_attribute},"
+        cmd += f" 1>> {self.jmx_tool_log}"
+        cmd += f" 2>> {self.jmx_tool_err_log} &"
 
         self.logger.debug("%s: Start JmxTool %d command: %s" % (node.account, idx, cmd))
         node.account.ssh(cmd, allow_fail=False)
-        wait_until(lambda: self._jmx_has_output(node), timeout_sec=30, backoff_sec=.5, err_msg="%s: Jmx tool took too long to start" % node.account)
+        wait_until(
+            lambda: self._jmx_has_output(node),
+            timeout_sec=30,
+            backoff_sec=0.5,
+            err_msg=f"{node.account}: Jmx tool took too long to start",
+        )
+
         self.started[idx-1] = True
 
     def _jmx_has_output(self, node):
         """Helper used as a proxy to determine whether jmx is running by that jmx_tool_log contains output."""
         try:
-            node.account.ssh("test -s %s" % self.jmx_tool_log, allow_fail=False)
+            node.account.ssh(f"test -s {self.jmx_tool_log}", allow_fail=False)
             return True
         except RemoteCommandError:
             return False
@@ -104,9 +131,9 @@ class JmxMixin(object):
 
         object_attribute_names = []
 
-        cmd = "cat %s" % self.jmx_tool_log
+        cmd = f"cat {self.jmx_tool_log}"
         self.logger.debug("Read jmx output %d command: %s", idx, cmd)
-        lines = [line for line in node.account.ssh_capture(cmd, allow_fail=False)]
+        lines = list(node.account.ssh_capture(cmd, allow_fail=False))
         assert len(lines) > 1, "There don't appear to be any samples in the jmx tool log: %s" % lines
 
         for line in lines:
@@ -123,8 +150,14 @@ class JmxMixin(object):
         if any(len(time_to_stats) == 0 for time_to_stats in self.jmx_stats):
             return
 
-        start_time_sec = min([min(time_to_stats.keys()) for time_to_stats in self.jmx_stats])
-        end_time_sec = max([max(time_to_stats.keys()) for time_to_stats in self.jmx_stats])
+        start_time_sec = min(
+            min(time_to_stats.keys()) for time_to_stats in self.jmx_stats
+        )
+
+        end_time_sec = max(
+            max(time_to_stats.keys()) for time_to_stats in self.jmx_stats
+        )
+
 
         for name in object_attribute_names:
             aggregates_per_time = []

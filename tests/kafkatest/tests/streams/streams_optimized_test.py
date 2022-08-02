@@ -85,10 +85,25 @@ class StreamsOptimizedTest(Test):
         self.logger.info("reset")
         self.reset_application()
         for processor in processors:
-            processor.node.account.ssh("mv " + processor.LOG_FILE + " " + processor.LOG_FILE + ".1", allow_fail=False)
-            processor.node.account.ssh("mv " + processor.STDOUT_FILE + " " + processor.STDOUT_FILE + ".1", allow_fail=False)
-            processor.node.account.ssh("mv " + processor.STDERR_FILE + " " + processor.STDERR_FILE + ".1", allow_fail=False)
-            processor.node.account.ssh("mv " + processor.CONFIG_FILE + " " + processor.CONFIG_FILE + ".1", allow_fail=False)
+            processor.node.account.ssh(
+                f"mv {processor.LOG_FILE} {processor.LOG_FILE}.1", allow_fail=False
+            )
+
+            processor.node.account.ssh(
+                f"mv {processor.STDOUT_FILE} {processor.STDOUT_FILE}.1",
+                allow_fail=False,
+            )
+
+            processor.node.account.ssh(
+                f"mv {processor.STDERR_FILE} {processor.STDERR_FILE}.1",
+                allow_fail=False,
+            )
+
+            processor.node.account.ssh(
+                f"mv {processor.CONFIG_FILE} {processor.CONFIG_FILE}.1",
+                allow_fail=False,
+            )
+
 
         self.logger.info("start again with topology optimized")
         for processor in processors:
@@ -117,10 +132,13 @@ class StreamsOptimizedTest(Test):
         node = processor.node
         with node.account.monitor_log(processor.STDOUT_FILE) as monitor:
             processor.start()
-            monitor.wait_until('REBALANCING -> RUNNING with REPARTITION TOPIC COUNT=%s' % repartition_topic_count,
-                               timeout_sec=120,
-                               err_msg="Never saw 'REBALANCING -> RUNNING with REPARTITION TOPIC COUNT=%s' message "
-                                       % repartition_topic_count + str(processor.node.account))
+            monitor.wait_until(
+                f'REBALANCING -> RUNNING with REPARTITION TOPIC COUNT={repartition_topic_count}',
+                timeout_sec=120,
+                err_msg="Never saw 'REBALANCING -> RUNNING with REPARTITION TOPIC COUNT=%s' message "
+                % repartition_topic_count
+                + str(processor.node.account),
+            )
 
     def verify_processing(self, processors, verify_individual_operations):
         # This test previously had logic to account for skewed assignments, in which not all processors may
@@ -136,8 +154,15 @@ class StreamsOptimizedTest(Test):
                 self.do_verify(processor, self.operation_pattern)
 
     def do_verify(self, processor, pattern):
-        self.logger.info("Verifying %s processing pattern in STDOUT_FILE" % pattern)
-        self.logger.info(list(processor.node.account.ssh_capture("ls -lh %s" % (processor.STDOUT_FILE), allow_fail=True)))
+        self.logger.info(f"Verifying {pattern} processing pattern in STDOUT_FILE")
+        self.logger.info(
+            list(
+                processor.node.account.ssh_capture(
+                    f"ls -lh {processor.STDOUT_FILE}", allow_fail=True
+                )
+            )
+        )
+
         wait_until(
             lambda: processor.node.account.ssh("grep --max-count 1 '%s' %s" % (pattern, processor.STDOUT_FILE), allow_fail=True) == 0,
             timeout_sec=60

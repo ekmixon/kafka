@@ -132,7 +132,10 @@ class TrogdorService(KafkaPathResolverMixin, Service):
 
         # Create the configuration file on the node.
         str = json.dumps(self._create_config_dict(), indent=2)
-        self.logger.info("Creating configuration file %s with %s" % (TrogdorService.CONFIG_PATH, str))
+        self.logger.info(
+            f"Creating configuration file {TrogdorService.CONFIG_PATH} with {str}"
+        )
+
         node.account.create_file(TrogdorService.CONFIG_PATH, str)
 
         if self.is_coordinator(node):
@@ -147,7 +150,7 @@ class TrogdorService(KafkaPathResolverMixin, Service):
         self._start_trogdor_daemon("coordinator", TrogdorService.COORDINATOR_STDOUT_STDERR,
                                    TrogdorService.COORDINATOR_LOG4J_PROPERTIES,
                                    TrogdorService.COORDINATOR_LOG, node)
-        self.logger.info("Started trogdor coordinator on %s." % node.name)
+        self.logger.info(f"Started trogdor coordinator on {node.name}.")
 
     def _start_agent_node(self, node):
         node.account.create_file(TrogdorService.AGENT_LOG4J_PROPERTIES,
@@ -156,23 +159,23 @@ class TrogdorService(KafkaPathResolverMixin, Service):
         self._start_trogdor_daemon("agent", TrogdorService.AGENT_STDOUT_STDERR,
                                    TrogdorService.AGENT_LOG4J_PROPERTIES,
                                    TrogdorService.AGENT_LOG, node)
-        self.logger.info("Started trogdor agent on %s." % node.name)
+        self.logger.info(f"Started trogdor agent on {node.name}.")
 
     def _start_trogdor_daemon(self, daemon_name, stdout_stderr_capture_path,
                               log4j_properties_path, log_path, node):
         cmd = "export KAFKA_LOG4J_OPTS='-Dlog4j.configuration=file:%s'; " % log4j_properties_path
-        cmd += "%s %s --%s.config %s --node-name %s 1>> %s 2>> %s &" % \
-               (self.path.script("trogdor.sh", node),
-                daemon_name,
-                daemon_name,
-                TrogdorService.CONFIG_PATH,
-                node.name,
-                stdout_stderr_capture_path,
-                stdout_stderr_capture_path)
+        cmd += f'{self.path.script("trogdor.sh", node)} {daemon_name} --{daemon_name}.config {TrogdorService.CONFIG_PATH} --node-name {node.name} 1>> {stdout_stderr_capture_path} 2>> {stdout_stderr_capture_path} &'
+
         node.account.ssh(cmd)
         with node.account.monitor_log(log_path) as monitor:
-            monitor.wait_until("Starting %s process." % daemon_name, timeout_sec=60, backoff_sec=.10,
-                               err_msg=("%s on %s didn't finish startup" % (daemon_name, node.name)))
+            monitor.wait_until(
+                f"Starting {daemon_name} process.",
+                timeout_sec=60,
+                backoff_sec=0.10,
+                err_msg=(
+                    "%s on %s didn't finish startup" % (daemon_name, node.name)
+                ),
+            )
 
     def wait_node(self, node, timeout_sec=None):
         if self.is_coordinator(node):
@@ -190,7 +193,7 @@ class TrogdorService(KafkaPathResolverMixin, Service):
     def clean_node(self, node):
         """Clean up persistent state on this node - e.g. service logs, configuration files etc."""
         self.stop_node(node)
-        node.account.ssh("rm -rf -- %s" % TrogdorService.PERSISTENT_ROOT)
+        node.account.ssh(f"rm -rf -- {TrogdorService.PERSISTENT_ROOT}")
 
     def _coordinator_url(self, path):
         return "http://%s:%d/coordinator/%s" % \
@@ -214,7 +217,7 @@ class TrogdorService(KafkaPathResolverMixin, Service):
         :return:                The response as an object.
         """
         url = self._coordinator_url(path)
-        self.logger.info("POST %s %s" % (url, message))
+        self.logger.info(f"POST {url} {message}")
         response = self.request_session().post(url, json=message,
                                                timeout=TrogdorService.REQUEST_TIMEOUT,
                                                headers=TrogdorService.REQUEST_HEADERS)
@@ -230,7 +233,7 @@ class TrogdorService(KafkaPathResolverMixin, Service):
         :return:                The response as an object.
         """
         url = self._coordinator_url(path)
-        self.logger.info("PUT %s %s" % (url, message))
+        self.logger.info(f"PUT {url} {message}")
         response = self.request_session().put(url, json=message,
                                               timeout=TrogdorService.REQUEST_TIMEOUT,
                                               headers=TrogdorService.REQUEST_HEADERS)
@@ -246,7 +249,7 @@ class TrogdorService(KafkaPathResolverMixin, Service):
         :return:                The response as an object.
         """
         url = self._coordinator_url(path)
-        self.logger.info("GET %s %s" % (url, message))
+        self.logger.info(f"GET {url} {message}")
         response = self.request_session().get(url, json=message,
                                               timeout=TrogdorService.REQUEST_TIMEOUT,
                                               headers=TrogdorService.REQUEST_HEADERS)
@@ -303,7 +306,7 @@ class TrogdorTask(object):
     def task_state_or_error(self):
         task_state = self.trogdor.tasks()["tasks"][self.id]
         if task_state is None:
-            raise RuntimeError("Coordinator did not know about %s." % self.id)
+            raise RuntimeError(f"Coordinator did not know about {self.id}.")
         error = task_state.get("error")
         if error is None or error == "":
             return task_state["state"], None
@@ -322,7 +325,9 @@ class TrogdorTask(object):
         if task_state is not None:
             return task_state == TrogdorTask.DONE_STATE
         else:
-            raise RuntimeError("Failed to gracefully stop %s: got task error: %s" % (self.id, error))
+            raise RuntimeError(
+                f"Failed to gracefully stop {self.id}: got task error: {error}"
+            )
 
     def running(self):
         """
@@ -336,7 +341,7 @@ class TrogdorTask(object):
         if task_state is not None:
             return task_state == TrogdorTask.RUNNING_STATE
         else:
-            raise RuntimeError("Failed to start %s: got task error: %s" % (self.id, error))
+            raise RuntimeError(f"Failed to start {self.id}: got task error: {error}")
 
     def stop(self):
         """
@@ -349,6 +354,8 @@ class TrogdorTask(object):
         self.trogdor.stop_task(self.id)
 
     def wait_for_done(self, timeout_sec=360):
-        wait_until(lambda: self.done(),
-                   timeout_sec=timeout_sec,
-                   err_msg="%s failed to finish in the expected amount of time." % self.id)
+        wait_until(
+            lambda: self.done(),
+            timeout_sec=timeout_sec,
+            err_msg=f"{self.id} failed to finish in the expected amount of time.",
+        )

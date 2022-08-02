@@ -93,8 +93,11 @@ class ConnectRestApiTest(KafkaTest):
 
         # After MM2 and the connector classes that it added, the assertion here checks that the registered
         # Connect plugins are a superset of the connectors expected to be present.
-        assert set([connector_plugin['class'] for connector_plugin in self.cc.list_connector_plugins()]).issuperset(
-            {self.FILE_SOURCE_CONNECTOR, self.FILE_SINK_CONNECTOR})
+        assert {
+            connector_plugin['class']
+            for connector_plugin in self.cc.list_connector_plugins()
+        }.issuperset({self.FILE_SOURCE_CONNECTOR, self.FILE_SINK_CONNECTOR})
+
 
         source_connector_props = self.render("connect-file-source.properties")
         sink_connector_props = self.render("connect-file-sink.properties")
@@ -113,12 +116,17 @@ class ConnectRestApiTest(KafkaTest):
         self.cc.create_connector(sink_connector_config)
 
         # We should see the connectors appear
-        wait_until(lambda: set(self.cc.list_connectors()) == set(["local-file-source", "local-file-sink"]),
-                   timeout_sec=10, err_msg="Connectors that were just created did not appear in connector listing")
+        wait_until(
+            lambda: set(self.cc.list_connectors())
+            == {"local-file-source", "local-file-sink"},
+            timeout_sec=10,
+            err_msg="Connectors that were just created did not appear in connector listing",
+        )
+
 
         # We'll only do very simple validation that the connectors and tasks really ran.
         for node in self.cc.nodes:
-            node.account.ssh("echo -e -n " + repr(self.INPUTS) + " >> " + self.INPUT_FILE)
+            node.account.ssh(f"echo -e -n {repr(self.INPUTS)} >> {self.INPUT_FILE}")
         wait_until(lambda: self.validate_output(self.INPUT_LIST), timeout_sec=120, err_msg="Data added to input file was not seen in the output file in a reasonable amount of time.")
 
         # Trying to create the same connector again should cause an error
@@ -136,9 +144,15 @@ class ConnectRestApiTest(KafkaTest):
             'type': 'source'
         }
         source_info = self.cc.get_connector("local-file-source")
-        assert expected_source_info == source_info, "Incorrect info:" + json.dumps(source_info)
+        assert (
+            expected_source_info == source_info
+        ), f"Incorrect info:{json.dumps(source_info)}"
+
         source_config = self.cc.get_connector_config("local-file-source")
-        assert expected_source_info['config'] == source_config, "Incorrect config: " + json.dumps(source_config)
+        assert (
+            expected_source_info['config'] == source_config
+        ), f"Incorrect config: {json.dumps(source_config)}"
+
         expected_sink_info = {
             'name': 'local-file-sink',
             'config': self._config_dict_from_props(sink_connector_props),
@@ -146,9 +160,15 @@ class ConnectRestApiTest(KafkaTest):
             'type': 'sink'
         }
         sink_info = self.cc.get_connector("local-file-sink")
-        assert expected_sink_info == sink_info, "Incorrect info:" + json.dumps(sink_info)
+        assert (
+            expected_sink_info == sink_info
+        ), f"Incorrect info:{json.dumps(sink_info)}"
+
         sink_config = self.cc.get_connector_config("local-file-sink")
-        assert expected_sink_info['config'] == sink_config, "Incorrect config: " + json.dumps(sink_config)
+        assert (
+            expected_sink_info['config'] == sink_config
+        ), f"Incorrect config: {json.dumps(sink_config)}"
+
 
         # Validate that we can get info about tasks. This info should definitely be available now without waiting since
         # we've already seen data appear in files.
@@ -163,7 +183,10 @@ class ConnectRestApiTest(KafkaTest):
             }
         }]
         source_task_info = self.cc.get_connector_tasks("local-file-source")
-        assert expected_source_task_info == source_task_info, "Incorrect info:" + json.dumps(source_task_info)
+        assert (
+            expected_source_task_info == source_task_info
+        ), f"Incorrect info:{json.dumps(source_task_info)}"
+
         expected_sink_task_info = [{
             'id': {'connector': 'local-file-sink', 'task': 0},
             'config': {
@@ -173,7 +196,10 @@ class ConnectRestApiTest(KafkaTest):
             }
         }]
         sink_task_info = self.cc.get_connector_tasks("local-file-sink")
-        assert expected_sink_task_info == sink_task_info, "Incorrect info:" + json.dumps(sink_task_info)
+        assert (
+            expected_sink_task_info == sink_task_info
+        ), f"Incorrect info:{json.dumps(sink_task_info)}"
+
 
         file_source_config = self._config_dict_from_props(source_connector_props)
         file_source_config['file'] = self.INPUT_FILE2
@@ -182,7 +208,7 @@ class ConnectRestApiTest(KafkaTest):
         # We should also be able to verify that the modified configs caused the tasks to move to the new file and pick up
         # more data.
         for node in self.cc.nodes:
-            node.account.ssh("echo -e -n " + repr(self.LONER_INPUTS) + " >> " + self.INPUT_FILE2)
+            node.account.ssh(f"echo -e -n {repr(self.LONER_INPUTS)} >> {self.INPUT_FILE2}")
         wait_until(lambda: self.validate_output(self.LONGER_INPUT_LIST), timeout_sec=120, err_msg="Data added to input file was not seen in the output file in a reasonable amount of time.")
 
         self.cc.delete_connector("local-file-source")
@@ -201,7 +227,7 @@ class ConnectRestApiTest(KafkaTest):
         try:
             # Convert to a list here or the RemoteCommandError may be returned during a call to the generator instead of
             # immediately
-            return list(node.account.ssh_capture("cat " + file))
+            return list(node.account.ssh_capture(f"cat {file}"))
         except RemoteCommandError:
             return []
 

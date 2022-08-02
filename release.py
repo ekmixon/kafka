@@ -51,6 +51,7 @@ release.py release-email
 
 """
 
+
 import datetime
 from getpass import getpass
 import json
@@ -65,7 +66,7 @@ PROJECT_NAME = "kafka"
 CAPITALIZED_PROJECT_NAME = "kafka".upper()
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 # Location of the local git repository
-REPO_HOME = os.environ.get("%s_HOME" % CAPITALIZED_PROJECT_NAME, SCRIPT_DIR)
+REPO_HOME = os.environ.get(f"{CAPITALIZED_PROJECT_NAME}_HOME", SCRIPT_DIR)
 # Remote name, which points to Github by default
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache-github")
 PREFS_FILE = os.path.join(SCRIPT_DIR, '.release-settings.json')
@@ -76,17 +77,27 @@ work_dir = None
 
 def fail(msg):
     if work_dir:
-        cmd("Cleaning up work directory", "rm -rf %s" % work_dir)
+        cmd("Cleaning up work directory", f"rm -rf {work_dir}")
 
     if delete_gitrefs:
         try:
-            cmd("Resetting repository working state to branch %s" % starting_branch, "git reset --hard HEAD && git checkout %s" % starting_branch, shell=True)
-            cmd("Deleting git branches %s" % release_version, "git branch -D %s" % release_version, shell=True)
-            cmd("Deleting git tag %s" %rc_tag , "git tag -d %s" % rc_tag, shell=True)
+            cmd(
+                f"Resetting repository working state to branch {starting_branch}",
+                f"git reset --hard HEAD && git checkout {starting_branch}",
+                shell=True,
+            )
+
+            cmd(
+                f"Deleting git branches {release_version}",
+                f"git branch -D {release_version}",
+                shell=True,
+            )
+
+            cmd(f"Deleting git tag {rc_tag}", f"git tag -d {rc_tag}", shell=True)
         except subprocess.CalledProcessError:
             print("Failed when trying to clean up git references added by this script. You may need to clean up branches/tags yourself before retrying.")
-            print("Expected git branch: " + release_version)
-            print("Expected git tag: " + rc_tag)
+            print(f"Expected git branch: {release_version}")
+            print(f"Expected git tag: {rc_tag}")
     print(msg)
     sys.exit(1)
 
@@ -142,8 +153,10 @@ def cmd_output(cmd, *args, **kwargs):
 def replace(path, pattern, replacement):
     updated = []
     with open(path, 'r') as f:
-        for line in f:
-            updated.append((replacement + '\n') if line.startswith(pattern) else line)
+        updated.extend(
+            (replacement + '\n') if line.startswith(pattern) else line
+            for line in f
+        )
 
     with open(path, 'w') as f:
         for line in updated:
@@ -152,9 +165,7 @@ def replace(path, pattern, replacement):
 def regexReplace(path, pattern, replacement):
     updated = []
     with open(path, 'r') as f:
-        for line in f:
-            updated.append(re.sub(pattern, replacement, line))
-
+        updated.extend(re.sub(pattern, replacement, line) for line in f)
     with open(path, 'w') as f:
         for line in updated:
             f.write(line)
@@ -165,23 +176,39 @@ def user_ok(msg):
 
 def sftp_mkdir(dir):
     try:
-       cmd_str  = """
+        cmd_str  = """
 mkdir %s
 """ % dir
-       cmd("Creating '%s' in your Apache home directory if it does not exist (errors are ok if the directory already exists)" % dir, "sftp -b - %s@home.apache.org" % apache_id, stdin=cmd_str, allow_failure=True, num_retries=3)
+        cmd(
+            "Creating '%s' in your Apache home directory if it does not exist (errors are ok if the directory already exists)"
+            % dir,
+            f"sftp -b - {apache_id}@home.apache.org",
+            stdin=cmd_str,
+            allow_failure=True,
+            num_retries=3,
+        )
+
     except subprocess.CalledProcessError:
         # This is ok. The command fails if the directory already exists
         pass
 
 def sftp_upload(dir):
     try:
-       cmd_str  = """
+        cmd_str  = """
 cd %s
 put -r %s
 """ % (PUBLIC_HTML, dir)
-       cmd("Uploading '%s' under %s in your Apache home directory" % (dir, PUBLIC_HTML), "sftp -b - %s@home.apache.org" % apache_id, stdin=cmd_str, allow_failure=True, num_retries=3)
+        cmd(
+            "Uploading '%s' under %s in your Apache home directory"
+            % (dir, PUBLIC_HTML),
+            f"sftp -b - {apache_id}@home.apache.org",
+            stdin=cmd_str,
+            allow_failure=True,
+            num_retries=3,
+        )
+
     except subprocess.CalledProcessError:
-        fail("Failed uploading %s to your Apache home directory" % dir)
+        fail(f"Failed uploading {dir} to your Apache home directory")
 
 def get_pref(prefs, name, request_fn):
     "Get a preference from existing preference dictionary or invoke a function that can collect it from the user"
@@ -201,7 +228,7 @@ def load_prefs():
 
 def save_prefs(prefs):
     """Save preferences"""
-    print("Saving preferences to %s" % PREFS_FILE)
+    print(f"Saving preferences to {PREFS_FILE}")
     with open(PREFS_FILE, 'w') as prefs_fp:
         prefs = json.dump(prefs, prefs_fp)
 
@@ -212,12 +239,12 @@ def get_jdk(prefs, version):
     jdk_java_home = get_pref(prefs, 'jdk%d' % version, lambda: input("Enter the path for JAVA_HOME for a JDK%d compiler (blank to use default JAVA_HOME): " % version))
     jdk_env = dict(os.environ) if jdk_java_home.strip() else None
     if jdk_env is not None: jdk_env['JAVA_HOME'] = jdk_java_home
-    java_version = cmd_output("%s/bin/java -version" % jdk_java_home, env=jdk_env)
+    java_version = cmd_output(f"{jdk_java_home}/bin/java -version", env=jdk_env)
     if version == 8:
-      if "1.8.0" not in java_version:
-        fail("JDK 8 is required")
+        if "1.8.0" not in java_version:
+          fail("JDK 8 is required")
     elif "%d.0" % version not in java_version and '"%d"' % version not in java_version:
-      fail("JDK %s is required" % version)
+        fail(f"JDK {version} is required")
     return jdk_env
 
 def get_version(repo=REPO_HOME):
@@ -238,7 +265,10 @@ def docs_version(version):
     """
     version_parts = version.strip().split('.')
     # 1.0+ will only have 3 version components as opposed to pre-1.0 that had 4
-    major_minor = version_parts[0:3] if version_parts[0] == '0' else version_parts[0:2]
+    major_minor = (
+        version_parts[:3] if version_parts[0] == '0' else version_parts[:2]
+    )
+
     return ''.join(major_minor)
 
 def docs_release_version(version):
@@ -271,9 +301,22 @@ def command_stage_docs():
     # version due to already having bumped the bugfix version number.
     gradle_version_override = docs_release_version(version)
 
-    cmd("Building docs", "./gradlew -Pversion=%s clean siteDocsTar aggregatedJavadoc" % gradle_version_override, cwd=REPO_HOME, env=jdk17_env)
+    cmd(
+        "Building docs",
+        f"./gradlew -Pversion={gradle_version_override} clean siteDocsTar aggregatedJavadoc",
+        cwd=REPO_HOME,
+        env=jdk17_env,
+    )
 
-    docs_tar = os.path.join(REPO_HOME, 'core', 'build', 'distributions', 'kafka_2.13-%s-site-docs.tgz' % gradle_version_override)
+
+    docs_tar = os.path.join(
+        REPO_HOME,
+        'core',
+        'build',
+        'distributions',
+        f'kafka_2.13-{gradle_version_override}-site-docs.tgz',
+    )
+
 
     versioned_docs_path = os.path.join(kafka_site_repo_path, docs_version(version))
     if not os.path.exists(versioned_docs_path):
@@ -281,11 +324,16 @@ def command_stage_docs():
 
     # The contents of the docs jar are site-docs/<docs dir>. We need to get rid of the site-docs prefix and dump everything
     # inside it into the docs version subdirectory in the kafka-site repo
-    cmd('Extracting site-docs', 'tar xf %s --strip-components 1' % docs_tar, cwd=versioned_docs_path)
+    cmd(
+        'Extracting site-docs',
+        f'tar xf {docs_tar} --strip-components 1',
+        cwd=versioned_docs_path,
+    )
+
 
     javadocs_src_dir = os.path.join(REPO_HOME, 'build', 'docs', 'javadoc')
 
-    cmd('Copying javadocs', 'cp -R %s %s' % (javadocs_src_dir, versioned_docs_path))
+    cmd('Copying javadocs', f'cp -R {javadocs_src_dir} {versioned_docs_path}')
 
     sys.exit(0)
 
@@ -314,17 +362,31 @@ def command_release_announcement_email():
     release_tag_pattern = re.compile('^[0-9]+\.[0-9]+\.[0-9]+$')
     release_tags = sorted([t for t in tags if re.match(release_tag_pattern, t)])
     release_version_num = release_tags[-1]
-    if not user_ok("""Is the current release %s ? (y/n): """ % release_version_num):
+    if not user_ok(
+        f"""Is the current release {release_version_num} ? (y/n): """
+    ):
         release_version_num = input('What is the current release version:')
         validate_release_num(release_version_num)
     previous_release_version_num = release_tags[-2]
-    if not user_ok("""Is the previous release %s ? (y/n): """ % previous_release_version_num):
+    if not user_ok(
+        f"""Is the previous release {previous_release_version_num} ? (y/n): """
+    ):
         previous_release_version_num = input('What is the previous release version:')
         validate_release_num(previous_release_version_num)
     if release_version_num < previous_release_version_num :
         fail("Current release version number can't be less than previous release version number")
-    number_of_contributors = int(subprocess.check_output('git shortlog -sn --no-merges %s..%s | wc -l' % (previous_release_version_num, release_version_num) , shell=True).decode('utf-8'))
-    contributors = subprocess.check_output("git shortlog -sn --no-merges %s..%s | cut -f2 | sort --ignore-case" % (previous_release_version_num, release_version_num), shell=True).decode('utf-8')
+    number_of_contributors = int(
+        subprocess.check_output(
+            f'git shortlog -sn --no-merges {previous_release_version_num}..{release_version_num} | wc -l',
+            shell=True,
+        ).decode('utf-8')
+    )
+
+    contributors = subprocess.check_output(
+        f"git shortlog -sn --no-merges {previous_release_version_num}..{release_version_num} | cut -f2 | sort --ignore-case",
+        shell=True,
+    ).decode('utf-8')
+
     release_announcement_data = {
         'number_of_contributors': number_of_contributors,
         'contributors': ', '.join(str(x) for x in filter(None, contributors.split('\n'))),
@@ -421,8 +483,8 @@ if subcommand == 'stage-docs':
     command_stage_docs()
 elif subcommand == 'release-email':
     command_release_announcement_email()
-elif not (subcommand is None or subcommand == 'stage'):
-    fail("Unknown subcommand: %s" % subcommand)
+elif subcommand is not None and subcommand != 'stage':
+    fail(f"Unknown subcommand: {subcommand}")
 # else -> default subcommand stage
 
 
@@ -496,7 +558,7 @@ dev_branch = '.'.join(release_version_parts[:2])
 docs_release_version = docs_version(release_version)
 
 # Validate that the release doesn't already exist and that the
-cmd("Fetching tags from upstream", 'git fetch --tags %s' % PUSH_REMOTE_NAME)
+cmd("Fetching tags from upstream", f'git fetch --tags {PUSH_REMOTE_NAME}')
 tags = cmd_output('git tag').split()
 
 if release_version in tags:
@@ -507,7 +569,7 @@ if not rc:
     fail("Automatic Promotion is not yet supported.")
 
     # Find the latest RC and make sure they want to promote that one
-    rc_tag = sorted([t for t in tags if t.startswith(release_version + '-rc')])[-1]
+    rc_tag = sorted([t for t in tags if t.startswith(f'{release_version}-rc')])[-1]
     if not user_ok("Found %s as latest RC for this release. Is this correct? (y/n): "):
         fail("This script couldn't determine which RC tag to promote, you'll need to fix up the RC tags and re-run the script.")
 
@@ -534,7 +596,26 @@ gpg_passphrase = get_pref(prefs, 'gpg-pass', lambda: getpass("Passphrase for thi
 # Do a quick validation so we can fail fast if the password is incorrect
 with tempfile.NamedTemporaryFile() as gpg_test_tempfile:
     gpg_test_tempfile.write("abcdefg".encode('utf-8'))
-    cmd("Testing GPG key & passphrase", ["gpg", "--batch", "--pinentry-mode", "loopback", "--passphrase-fd", "0", "-u", key_name, "--armor", "--output", gpg_test_tempfile.name + ".asc", "--detach-sig", gpg_test_tempfile.name], stdin=gpg_passphrase)
+    cmd(
+        "Testing GPG key & passphrase",
+        [
+            "gpg",
+            "--batch",
+            "--pinentry-mode",
+            "loopback",
+            "--passphrase-fd",
+            "0",
+            "-u",
+            key_name,
+            "--armor",
+            "--output",
+            f"{gpg_test_tempfile.name}.asc",
+            "--detach-sig",
+            gpg_test_tempfile.name,
+        ],
+        stdin=gpg_passphrase,
+    )
+
 
 save_prefs(prefs)
 
@@ -542,13 +623,17 @@ save_prefs(prefs)
 try:
     int(rc)
 except ValueError:
-    fail("Invalid release candidate number: %s" % rc)
-rc_tag = release_version + '-rc' + rc
+    fail(f"Invalid release candidate number: {rc}")
+rc_tag = f'{release_version}-rc{rc}'
 
 delete_gitrefs = True # Since we are about to start creating new git refs, enable cleanup function on failure to try to delete them
-cmd("Checking out current development branch", "git checkout -b %s %s" % (release_version, PUSH_REMOTE_NAME + "/" + dev_branch))
+cmd(
+    "Checking out current development branch",
+    f"git checkout -b {release_version} {PUSH_REMOTE_NAME}/{dev_branch}",
+)
+
 print("Updating version numbers")
-replace("gradle.properties", "version", "version=%s" % release_version)
+replace("gradle.properties", "version", f"version={release_version}")
 replace("tests/kafkatest/__init__.py", "__version__", "__version__ = '%s'" % release_version)
 print("updating streams quickstart pom")
 regexReplace("streams/quickstart/pom.xml", "-SNAPSHOT", "")
@@ -560,29 +645,58 @@ print("updating ducktape version.py")
 regexReplace("./tests/kafkatest/version.py", "^DEV_VERSION =.*",
     "DEV_VERSION = KafkaVersion(\"%s-SNAPSHOT\")" % release_version)
 # Command in explicit list due to messages with spaces
-cmd("Committing version number updates", ["git", "commit", "-a", "-m", "Bump version to %s" % release_version])
+cmd(
+    "Committing version number updates",
+    ["git", "commit", "-a", "-m", f"Bump version to {release_version}"],
+)
+
 # Command in explicit list due to messages with spaces
-cmd("Tagging release candidate %s" % rc_tag, ["git", "tag", "-a", rc_tag, "-m", rc_tag])
-rc_githash = cmd_output("git show-ref --hash " + rc_tag)
-cmd("Switching back to your starting branch", "git checkout %s" % starting_branch)
+cmd(
+    f"Tagging release candidate {rc_tag}",
+    ["git", "tag", "-a", rc_tag, "-m", rc_tag],
+)
+
+rc_githash = cmd_output(f"git show-ref --hash {rc_tag}")
+cmd(
+    "Switching back to your starting branch", f"git checkout {starting_branch}"
+)
+
 
 # Note that we don't use tempfile here because mkdtemp causes problems with sftp and being able to determine the absolute path to a file.
 # Instead we rely on a fixed path and if it
 work_dir = os.path.join(REPO_HOME, ".release_work_dir")
 if os.path.exists(work_dir):
-    fail("A previous attempt at a release left dirty state in the work directory. Clean up %s before proceeding. (This attempt will try to cleanup, simply retrying may be sufficient now...)" % work_dir)
+    fail(
+        f"A previous attempt at a release left dirty state in the work directory. Clean up {work_dir} before proceeding. (This attempt will try to cleanup, simply retrying may be sufficient now...)"
+    )
+
 os.makedirs(work_dir)
 print("Temporary build working director:", work_dir)
 kafka_dir = os.path.join(work_dir, 'kafka')
 streams_quickstart_dir = os.path.join(kafka_dir, 'streams/quickstart')
 print("Streams quickstart dir", streams_quickstart_dir)
-artifact_name = "kafka-" + rc_tag
-cmd("Creating staging area for release artifacts", "mkdir " + artifact_name, cwd=work_dir)
+artifact_name = f"kafka-{rc_tag}"
+cmd(
+    "Creating staging area for release artifacts",
+    f"mkdir {artifact_name}",
+    cwd=work_dir,
+)
+
 artifacts_dir = os.path.join(work_dir, artifact_name)
-cmd("Cloning clean copy of repo", "git clone %s kafka" % REPO_HOME, cwd=work_dir)
-cmd("Checking out RC tag", "git checkout -b %s %s" % (release_version, rc_tag), cwd=kafka_dir)
+cmd("Cloning clean copy of repo", f"git clone {REPO_HOME} kafka", cwd=work_dir)
+cmd(
+    "Checking out RC tag",
+    f"git checkout -b {release_version} {rc_tag}",
+    cwd=kafka_dir,
+)
+
 current_year = datetime.datetime.now().year
-cmd("Verifying the correct year in NOTICE", "grep %s NOTICE" % current_year, cwd=kafka_dir)
+cmd(
+    "Verifying the correct year in NOTICE",
+    f"grep {current_year} NOTICE",
+    cwd=kafka_dir,
+)
+
 
 with open(os.path.join(artifacts_dir, "RELEASE_NOTES.html"), 'w') as f:
     print("Generating release notes")
@@ -605,31 +719,82 @@ params = { 'release_version': release_version,
 cmd("Creating source archive", "git archive --format tar.gz --prefix kafka-%(release_version)s-src/ -o %(artifacts_dir)s/kafka-%(release_version)s-src.tgz %(rc_tag)s" % params)
 
 cmd("Building artifacts", "./gradlew clean && ./gradlewAll releaseTarGz", cwd=kafka_dir, env=jdk8_env, shell=True)
-cmd("Copying artifacts", "cp %s/core/build/distributions/* %s" % (kafka_dir, artifacts_dir), shell=True)
+cmd(
+    "Copying artifacts",
+    f"cp {kafka_dir}/core/build/distributions/* {artifacts_dir}",
+    shell=True,
+)
+
 cmd("Building docs", "./gradlew clean aggregatedJavadoc", cwd=kafka_dir, env=jdk17_env)
-cmd("Copying docs", "cp -R %s/build/docs/javadoc %s" % (kafka_dir, artifacts_dir))
+cmd("Copying docs", f"cp -R {kafka_dir}/build/docs/javadoc {artifacts_dir}")
 
 for filename in os.listdir(artifacts_dir):
     full_path = os.path.join(artifacts_dir, filename)
     if not os.path.isfile(full_path):
         continue
     # Commands in explicit list due to key_name possibly containing spaces
-    cmd("Signing " + full_path, ["gpg", "--batch", "--passphrase-fd", "0", "-u", key_name, "--armor", "--output", full_path + ".asc", "--detach-sig", full_path], stdin=gpg_passphrase)
-    cmd("Verifying " + full_path, ["gpg", "--verify", full_path + ".asc", full_path])
+    cmd(
+        f"Signing {full_path}",
+        [
+            "gpg",
+            "--batch",
+            "--passphrase-fd",
+            "0",
+            "-u",
+            key_name,
+            "--armor",
+            "--output",
+            f"{full_path}.asc",
+            "--detach-sig",
+            full_path,
+        ],
+        stdin=gpg_passphrase,
+    )
+
+    cmd(
+        f"Verifying {full_path}",
+        ["gpg", "--verify", f"{full_path}.asc", full_path],
+    )
+
     # Note that for verification, we need to make sure only the filename is used with --print-md because the command line
     # argument for the file is included in the output and verification uses a simple diff that will break if an absolut path
     # is used.
     dir, fname = os.path.split(full_path)
-    cmd("Generating MD5 for " + full_path, "gpg --print-md md5 %s > %s.md5" % (fname, fname), shell=True, cwd=dir)
-    cmd("Generating SHA1 for " + full_path, "gpg --print-md sha1 %s > %s.sha1" % (fname, fname), shell=True, cwd=dir)
-    cmd("Generating SHA512 for " + full_path, "gpg --print-md sha512 %s > %s.sha512" % (fname, fname), shell=True, cwd=dir)
+    cmd(
+        f"Generating MD5 for {full_path}",
+        f"gpg --print-md md5 {fname} > {fname}.md5",
+        shell=True,
+        cwd=dir,
+    )
 
-cmd("Listing artifacts to be uploaded:", "ls -R %s" % artifacts_dir)
+    cmd(
+        f"Generating SHA1 for {full_path}",
+        f"gpg --print-md sha1 {fname} > {fname}.sha1",
+        shell=True,
+        cwd=dir,
+    )
 
-cmd("Zipping artifacts", "tar -czf %s.tar.gz %s" % (artifact_name, artifact_name), cwd=work_dir)
+    cmd(
+        f"Generating SHA512 for {full_path}",
+        f"gpg --print-md sha512 {fname} > {fname}.sha512",
+        shell=True,
+        cwd=dir,
+    )
+
+
+cmd("Listing artifacts to be uploaded:", f"ls -R {artifacts_dir}")
+
+cmd(
+    "Zipping artifacts",
+    f"tar -czf {artifact_name}.tar.gz {artifact_name}",
+    cwd=work_dir,
+)
+
 sftp_mkdir(PUBLIC_HTML)
 sftp_upload(artifacts_dir)
-if not user_ok("Confirm the artifact is present under %s in your Apache home directory: https://home.apache.org/~%s/ (y/n)?: " % (PUBLIC_HTML, apache_id)):
+if not user_ok(
+    f"Confirm the artifact is present under {PUBLIC_HTML} in your Apache home directory: https://home.apache.org/~{apache_id}/ (y/n)?: "
+):
     fail("Ok, giving up")
 
 with open(os.path.expanduser("~/.gradle/gradle.properties")) as f:
@@ -687,13 +852,23 @@ print("If this is not the first RC, you need to 'Drop' the previous artifacts.")
 print("Confirm the correct artifacts are visible at https://repository.apache.org/content/groups/staging/org/apache/kafka/")
 if not user_ok("Have you successfully deployed the artifacts (y/n)?: "):
     fail("Ok, giving up")
-if not user_ok("Ok to push RC tag %s (y/n)?: " % rc_tag):
+if not user_ok(f"Ok to push RC tag {rc_tag} (y/n)?: "):
     fail("Ok, giving up")
-cmd("Pushing RC tag", "git push %s %s" % (PUSH_REMOTE_NAME, rc_tag))
+cmd("Pushing RC tag", f"git push {PUSH_REMOTE_NAME} {rc_tag}")
 
 # Move back to starting branch and clean out the temporary release branch (e.g. 1.0.0) we used to generate everything
-cmd("Resetting repository working state", "git reset --hard HEAD && git checkout %s" % starting_branch, shell=True)
-cmd("Deleting git branches %s" % release_version, "git branch -D %s" % release_version, shell=True)
+cmd(
+    "Resetting repository working state",
+    f"git reset --hard HEAD && git checkout {starting_branch}",
+    shell=True,
+)
+
+cmd(
+    f"Deleting git branches {release_version}",
+    f"git branch -D {release_version}",
+    shell=True,
+)
+
 
 
 email_contents = """

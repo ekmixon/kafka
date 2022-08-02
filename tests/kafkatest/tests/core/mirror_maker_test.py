@@ -92,7 +92,7 @@ class TestMirrorMakerService(ProduceConsumeValidateTest):
         if not clean_shutdown:
             time.sleep(self.mirror_maker.offset_commit_interval_ms / 1000.0 + .5)
 
-        for i in range(3):
+        for _ in range(3):
             self.logger.info("Bringing mirror maker nodes down...")
             for node in self.mirror_maker.nodes:
                 self.mirror_maker.stop_node(node, clean_shutdown=clean_shutdown)

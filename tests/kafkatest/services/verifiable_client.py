@@ -154,14 +154,15 @@ def create_verifiable_client_implementation(context, parent):
     If present, construct a new instance, else defaults to VerifiableClientJava
     """
 
-    # Default class
-    obj = {"class": "kafkatest.services.verifiable_client.VerifiableClientJava"}
-
     parent_name = parent.__class__.__name__.rsplit('.', 1)[-1]
-    for k in [parent_name, "VerifiableClient"]:
-        if k in context.globals:
-            obj = context.globals[k]
-            break
+    obj = next(
+        (
+            context.globals[k]
+            for k in [parent_name, "VerifiableClient"]
+            if k in context.globals
+        ),
+        {"class": "kafkatest.services.verifiable_client.VerifiableClientJava"},
+    )
 
     if "class" not in obj:
         raise SyntaxError('%s (or VerifiableClient) expected object format: {"class": "full.class.path", ..}' % parent_name)
@@ -169,7 +170,10 @@ def create_verifiable_client_implementation(context, parent):
     clname = obj["class"]
     # Using the fully qualified classname, import the implementation class
     if clname.find('.') == -1:
-        raise SyntaxError("%s (or VerifiableClient) must specify full class path (including module)" % parent_name)
+        raise SyntaxError(
+            f"{parent_name} (or VerifiableClient) must specify full class path (including module)"
+        )
+
 
     (module_name, clname) = clname.rsplit('.', 1)
     cluster_mod = importlib.import_module(module_name)
@@ -182,16 +186,16 @@ class VerifiableClientMixin (object):
     """
     Verifiable client mixin class which loads the actual VerifiableClient.. class.
     """
-    def __init__ (self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super(VerifiableClientMixin, self).__init__(*args, **kwargs)
         if hasattr(self.impl, 'deploy'):
             # Deploy client on node
-            self.context.logger.debug("Deploying %s on %s" % (self.impl, self.nodes))
+            self.context.logger.debug(f"Deploying {self.impl} on {self.nodes}")
             for node in self.nodes:
                 self.impl.deploy(node)
 
     @property
-    def impl (self):
+    def impl(self):
         """
         :return: Return (and create if necessary) the Verifiable client implementation object.
         """
@@ -199,7 +203,10 @@ class VerifiableClientMixin (object):
         if not hasattr(self, "_impl"):
             setattr(self, "_impl", create_verifiable_client_implementation(self.context, self))
             if hasattr(self.context, "logger") and self.context.logger is not None:
-                self.context.logger.debug("Using client implementation %s for %s" % (self._impl.__class__.__name__, self.__class__.__name__))
+                self.context.logger.debug(
+                    f"Using client implementation {self._impl.__class__.__name__} for {self.__class__.__name__}"
+                )
+
         return self._impl
 
 
@@ -224,12 +231,13 @@ class VerifiableClient (object):
         """ :return: list of pids for this client instance on node """
         raise NotImplementedError()
 
-    def kill_signal (self, clean_shutdown=True):
+    def kill_signal(self, clean_shutdown=True):
         """ :return: the kill signal to terminate the application. """
-        if not clean_shutdown:
-            return signal.SIGKILL
-
-        return self.conf.get("kill_signal", signal.SIGTERM)
+        return (
+            self.conf.get("kill_signal", signal.SIGTERM)
+            if clean_shutdown
+            else signal.SIGKILL
+        )
 
 
 class VerifiableClientJava (VerifiableClient):
@@ -246,7 +254,7 @@ class VerifiableClientJava (VerifiableClient):
         self.java_class_name = parent.java_class_name()
         self.conf = conf
 
-    def exec_cmd (self, node):
+    def exec_cmd(self, node):
         """ :return: command to execute to start instance
         Translates Verifiable* to the corresponding Java client class name """
         cmd = ""
@@ -255,19 +263,19 @@ class VerifiableClientJava (VerifiableClient):
             # the tools jar from trunk to the classpath
             tools_jar = self.parent.path.jar(TOOLS_JAR_NAME, DEV_BRANCH)
             tools_dependant_libs_jar = self.parent.path.jar(TOOLS_DEPENDANT_TEST_LIBS_JAR_NAME, DEV_BRANCH)
-            cmd += "for file in %s; do CLASSPATH=$CLASSPATH:$file; done; " % tools_jar
-            cmd += "for file in %s; do CLASSPATH=$CLASSPATH:$file; done; " % tools_dependant_libs_jar
+            cmd += f"for file in {tools_jar}; do CLASSPATH=$CLASSPATH:$file; done; "
+            cmd += f"for file in {tools_dependant_libs_jar}; do CLASSPATH=$CLASSPATH:$file; done; "
+
             cmd += "export CLASSPATH; "
         cmd += fix_opts_for_new_jvm(node)
         cmd += self.parent.path.script("kafka-run-class.sh", node) + " org.apache.kafka.tools." + self.java_class_name
         return cmd
 
-    def pids (self, node):
+    def pids(self, node):
         """ :return: pid(s) for this client intstance on node """
         try:
-            cmd = "jps | grep -i " + self.java_class_name + " | awk '{print $1}'"
-            pid_arr = [pid for pid in node.account.ssh_capture(cmd, allow_fail=True, callback=int)]
-            return pid_arr
+            cmd = f"jps | grep -i {self.java_class_name}" + " | awk '{print $1}'"
+            return list(node.account.ssh_capture(cmd, allow_fail=True, callback=int))
         except (RemoteCommandError, ValueError) as e:
             return []
 
@@ -321,18 +329,18 @@ class VerifiableClientApp (VerifiableClient):
         """ :return: command to execute to start instance """
         return self.conf["exec_cmd"]
 
-    def pids (self, node):
+    def pids(self, node):
         """ :return: pid(s) for this client intstance on node """
 
         cmd = self.conf.get("pids", "pgrep -f '" + self.conf["exec_cmd"] + "'")
         try:
-            pid_arr = [pid for pid in node.account.ssh_capture(cmd, allow_fail=True, callback=int)]
-            self.parent.context.logger.info("%s pids are: %s" % (str(node.account), pid_arr))
+            pid_arr = list(node.account.ssh_capture(cmd, allow_fail=True, callback=int))
+            self.parent.context.logger.info(f"{str(node.account)} pids are: {pid_arr}")
             return pid_arr
         except (subprocess.CalledProcessError, ValueError) as e:
             return []
 
-    def deploy (self, node):
+    def deploy(self, node):
         """ Call deploy script specified by "deploy" --global key
             This optional script is run on the VM instance just prior to
             executing `exec_cmd` to deploy the kafkatest client.
@@ -342,5 +350,5 @@ class VerifiableClientApp (VerifiableClient):
             return
 
         script_cmd = self.conf["deploy"]
-        self.parent.context.logger.debug("Deploying %s: %s" % (self, script_cmd))
+        self.parent.context.logger.debug(f"Deploying {self}: {script_cmd}")
         r = node.account.ssh(script_cmd)

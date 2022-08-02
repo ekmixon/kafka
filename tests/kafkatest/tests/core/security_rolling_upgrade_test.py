@@ -91,7 +91,10 @@ class TestSecurityRollingUpgrade(ProduceConsumeValidateTest):
     def roll_in_sasl_mechanism(self, security_protocol, new_sasl_mechanism):
         # Roll cluster to update inter-broker SASL mechanism.
         # We need the inter-broker SASL mechanism to still be enabled through this roll.
-        self.kafka.client_sasl_mechanism = "%s,%s" % (self.kafka.interbroker_sasl_mechanism, new_sasl_mechanism)
+        self.kafka.client_sasl_mechanism = (
+            f"{self.kafka.interbroker_sasl_mechanism},{new_sasl_mechanism}"
+        )
+
         self.kafka.interbroker_sasl_mechanism = new_sasl_mechanism
         self.bounce()
 

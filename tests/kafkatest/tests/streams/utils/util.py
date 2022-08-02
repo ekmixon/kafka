@@ -40,4 +40,4 @@ def extract_generation_id(generation):
     # "Generation{generationId=5,memberId='consumer-A-3-72d7be15-bcdd-4032-b247-784e648d4dd8',protocol='stream'} "
     # Extracting generationId from it.
     m = re.search(r'Generation{generationId=(\d+),.*', generation)
-    return int(m.group(1))
+    return int(m[1])

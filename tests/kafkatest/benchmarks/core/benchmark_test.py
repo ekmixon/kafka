@@ -149,8 +149,11 @@ class Benchmark(Test):
                 summary.append(" Time block %d: (empty)" % i)
                 data[i] = None
             else:
-                records_per_sec = sum([stat['records_per_sec'] for stat in subset])/float(len(subset))
-                mb_per_sec = sum([stat['mbps'] for stat in subset])/float(len(subset))
+                records_per_sec = sum(
+                    stat['records_per_sec'] for stat in subset
+                ) / float(len(subset))
+
+                mb_per_sec = sum(stat['mbps'] for stat in subset) / float(len(subset))
 
                 summary.append(" Time block %d: %f rec/sec (%f MB/s)" % (i, records_per_sec, mb_per_sec))
                 data[i] = throughput(records_per_sec, mb_per_sec)

@@ -90,7 +90,7 @@ class EndToEndTest(Test):
     def await_consumed_offsets(self, last_acked_offsets, timeout_sec):
         def has_finished_consuming():
             for partition, offset in last_acked_offsets.items():
-                if not partition in self.last_consumed_offsets:
+                if partition not in self.last_consumed_offsets:
                     return False
                 last_commit = self.consumer.last_commit(partition)
                 if not last_commit or last_commit < offset:
@@ -100,7 +100,7 @@ class EndToEndTest(Test):
         wait_until(has_finished_consuming,
                    timeout_sec=timeout_sec,
                    err_msg="Consumer failed to consume up to offsets %s after waiting %ds." %\
-                   (str(last_acked_offsets), timeout_sec))
+                       (str(last_acked_offsets), timeout_sec))
 
 
     def _collect_all_logs(self):
@@ -123,15 +123,17 @@ class EndToEndTest(Test):
             wait_until(lambda: self.producer.num_acked > min_records,
                        timeout_sec=producer_timeout_sec,
                        err_msg="Producer failed to produce messages for %ds." %\
-                       producer_timeout_sec)
+                           producer_timeout_sec)
 
-            self.logger.info("Stopping producer after writing up to offsets %s" %\
-                         str(self.producer.last_acked_offsets))
+            self.logger.info(
+                f"Stopping producer after writing up to offsets {str(self.producer.last_acked_offsets)}"
+            )
+
             self.producer.stop()
 
             self.await_consumed_offsets(self.producer.last_acked_offsets, consumer_timeout_sec)
             self.consumer.stop()
-            
+
             self.validate(enable_idempotence)
         except BaseException:
             self._collect_all_logs()

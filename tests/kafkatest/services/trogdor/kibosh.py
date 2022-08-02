@@ -75,56 +75,78 @@ class KiboshService(Service):
         Service.free(self)
 
     def kibosh_running(self, node):
-        return 0 == node.account.ssh("test -e '%s'" % self.control_path, allow_fail=True)
+        return (
+            node.account.ssh("test -e '%s'" % self.control_path, allow_fail=True)
+            == 0
+        )
 
     def start_node(self, node):
         node.account.mkdirs(self.persist)
         cmd = "sudo -E "
-        cmd += " %s" % KiboshService.BINARY_PATH
-        cmd += " --target %s" % self.target
-        cmd += " --pidfile %s" % self.pidfile_path
-        cmd += " --log %s" % self.log_path
+        cmd += f" {KiboshService.BINARY_PATH}"
+        cmd += f" --target {self.target}"
+        cmd += f" --pidfile {self.pidfile_path}"
+        cmd += f" --log {self.log_path}"
         cmd += " --control-mode 666"
         cmd += " --verbose"
-        cmd += " %s" % self.mirror
-        cmd += " &> %s" % self.stdout_stderr_path
+        cmd += f" {self.mirror}"
+        cmd += f" &> {self.stdout_stderr_path}"
         node.account.ssh(cmd)
-        util.wait_until(lambda: self.kibosh_running(node), 20, backoff_sec=.1,
-                        err_msg="Timed out waiting for kibosh to start on %s" % node.account.hostname)
+        util.wait_until(
+            lambda: self.kibosh_running(node),
+            20,
+            backoff_sec=0.1,
+            err_msg=f"Timed out waiting for kibosh to start on {node.account.hostname}",
+        )
 
     def pids(self, node):
-        return [pid for pid in node.account.ssh_capture("test -e '%s' && test -e /proc/$(cat '%s')" %
-                                                        (self.pidfile_path, self.pidfile_path), allow_fail=True)]
+        return list(
+            node.account.ssh_capture(
+                "test -e '%s' && test -e /proc/$(cat '%s')"
+                % (self.pidfile_path, self.pidfile_path),
+                allow_fail=True,
+            )
+        )
 
     def wait_node(self, node, timeout_sec=None):
         return len(self.pids(node)) == 0
 
     def kibosh_process_running(self, node):
         pids = self.pids(node)
-        if len(pids) == 0:
-            return True
-        return False
+        return len(pids) == 0
 
     def stop_node(self, node):
         """Halt kibosh process(es) on this node."""
-        node.account.logger.debug("stop_node(%s): unmounting %s" % (node.name, self.mirror))
-        node.account.ssh("sudo fusermount -u %s" % self.mirror, allow_fail=True)
+        node.account.logger.debug(f"stop_node({node.name}): unmounting {self.mirror}")
+        node.account.ssh(f"sudo fusermount -u {self.mirror}", allow_fail=True)
         # Wait for the kibosh process to terminate.
         try:
-            util.wait_until(lambda: self.kibosh_process_running(node), 20, backoff_sec=.1,
-                            err_msg="Timed out waiting for kibosh to stop on %s" % node.account.hostname)
+            util.wait_until(
+                lambda: self.kibosh_process_running(node),
+                20,
+                backoff_sec=0.1,
+                err_msg=f"Timed out waiting for kibosh to stop on {node.account.hostname}",
+            )
+
         except TimeoutError:
             # If the process won't terminate, use kill -9 to shut it down.
-            node.account.logger.debug("stop_node(%s): killing the kibosh process managing %s" % (node.name, self.mirror))
-            node.account.ssh("sudo kill -9 %s" % (" ".join(self.pids(node))), allow_fail=True)
-            node.account.ssh("sudo fusermount -u %s" % self.mirror)
-            util.wait_until(lambda: self.kibosh_process_running(node), 20, backoff_sec=.1,
-                            err_msg="Timed out waiting for kibosh to stop on %s" % node.account.hostname)
+            node.account.logger.debug(
+                f"stop_node({node.name}): killing the kibosh process managing {self.mirror}"
+            )
+
+            node.account.ssh(f'sudo kill -9 {" ".join(self.pids(node))}', allow_fail=True)
+            node.account.ssh(f"sudo fusermount -u {self.mirror}")
+            util.wait_until(
+                lambda: self.kibosh_process_running(node),
+                20,
+                backoff_sec=0.1,
+                err_msg=f"Timed out waiting for kibosh to stop on {node.account.hostname}",
+            )
 
     def clean_node(self, node):
         """Clean up persistent state on this node - e.g. service logs, configuration files etc."""
         self.stop_node(node)
-        node.account.ssh("rm -rf -- %s" % self.persist)
+        node.account.ssh(f"rm -rf -- {self.persist}")
 
     def set_faults(self, node, specs):
         """

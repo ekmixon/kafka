@@ -51,15 +51,22 @@ class SslStores(object):
         Generate CA private key and certificate.
         """
 
-        self.runcmd("keytool -genkeypair -alias ca -keyalg RSA -keysize 2048 -keystore %s -storetype JKS -storepass %s -keypass %s -dname CN=SystemTestCA -startdate %s --ext bc=ca:true" % (self.ca_jks_path, self.ca_passwd, self.ca_passwd, self.startdate))
-        self.runcmd("keytool -export -alias ca -keystore %s -storepass %s -storetype JKS -rfc -file %s" % (self.ca_jks_path, self.ca_passwd, self.ca_crt_path))
+        self.runcmd(
+            f"keytool -genkeypair -alias ca -keyalg RSA -keysize 2048 -keystore {self.ca_jks_path} -storetype JKS -storepass {self.ca_passwd} -keypass {self.ca_passwd} -dname CN=SystemTestCA -startdate {self.startdate} --ext bc=ca:true"
+        )
+
+        self.runcmd(
+            f"keytool -export -alias ca -keystore {self.ca_jks_path} -storepass {self.ca_passwd} -storetype JKS -rfc -file {self.ca_crt_path}"
+        )
 
     def generate_truststore(self):
         """
         Generate JKS truststore containing CA certificate.
         """
 
-        self.runcmd("keytool -importcert -alias ca -file %s -keystore %s -storepass %s -storetype JKS -noprompt" % (self.ca_crt_path, self.truststore_path, self.truststore_passwd))
+        self.runcmd(
+            f"keytool -importcert -alias ca -file {self.ca_crt_path} -keystore {self.truststore_path} -storepass {self.truststore_passwd} -storetype JKS -noprompt"
+        )
 
     def generate_and_copy_keystore(self, node):
         """
@@ -72,11 +79,26 @@ class SslStores(object):
         csr_path = os.path.join(ks_dir, "test.kafka.csr")
         crt_path = os.path.join(ks_dir, "test.kafka.crt")
 
-        self.runcmd("keytool -genkeypair -alias kafka -keyalg RSA -keysize 2048 -keystore %s -storepass %s -storetype JKS -keypass %s -dname CN=systemtest -ext SAN=DNS:%s -startdate %s" % (ks_path, self.keystore_passwd, self.key_passwd, self.hostname(node), self.startdate))
-        self.runcmd("keytool -certreq -keystore %s -storepass %s -storetype JKS -keypass %s -alias kafka -file %s" % (ks_path, self.keystore_passwd, self.key_passwd, csr_path))
-        self.runcmd("keytool -gencert -keystore %s -storepass %s -storetype JKS -alias ca -infile %s -outfile %s -dname CN=systemtest -ext SAN=DNS:%s -startdate %s" % (self.ca_jks_path, self.ca_passwd, csr_path, crt_path, self.hostname(node), self.startdate))
-        self.runcmd("keytool -importcert -keystore %s -storepass %s -storetype JKS -alias ca -file %s -noprompt" % (ks_path, self.keystore_passwd, self.ca_crt_path))
-        self.runcmd("keytool -importcert -keystore %s -storepass %s -storetype JKS -keypass %s -alias kafka -file %s -noprompt" % (ks_path, self.keystore_passwd, self.key_passwd, crt_path))
+        self.runcmd(
+            f"keytool -genkeypair -alias kafka -keyalg RSA -keysize 2048 -keystore {ks_path} -storepass {self.keystore_passwd} -storetype JKS -keypass {self.key_passwd} -dname CN=systemtest -ext SAN=DNS:{self.hostname(node)} -startdate {self.startdate}"
+        )
+
+        self.runcmd(
+            f"keytool -certreq -keystore {ks_path} -storepass {self.keystore_passwd} -storetype JKS -keypass {self.key_passwd} -alias kafka -file {csr_path}"
+        )
+
+        self.runcmd(
+            f"keytool -gencert -keystore {self.ca_jks_path} -storepass {self.ca_passwd} -storetype JKS -alias ca -infile {csr_path} -outfile {crt_path} -dname CN=systemtest -ext SAN=DNS:{self.hostname(node)} -startdate {self.startdate}"
+        )
+
+        self.runcmd(
+            f"keytool -importcert -keystore {ks_path} -storepass {self.keystore_passwd} -storetype JKS -alias ca -file {self.ca_crt_path} -noprompt"
+        )
+
+        self.runcmd(
+            f"keytool -importcert -keystore {ks_path} -storepass {self.keystore_passwd} -storetype JKS -keypass {self.key_passwd} -alias kafka -file {crt_path} -noprompt"
+        )
+
         node.account.copy_to(ks_path, SecurityConfig.KEYSTORE_PATH)
 
         # generate ZooKeeper client TLS config file for encryption-only (no client cert) use case
@@ -174,7 +196,10 @@ class SecurityConfig(TemplateRenderer):
         if security_protocol is None:
             security_protocol = SecurityConfig.PLAINTEXT
         elif security_protocol not in [SecurityConfig.PLAINTEXT, SecurityConfig.SSL, SecurityConfig.SASL_PLAINTEXT, SecurityConfig.SASL_SSL]:
-            raise Exception("Invalid security.protocol in template properties: " + security_protocol)
+            raise Exception(
+                f"Invalid security.protocol in template properties: {security_protocol}"
+            )
+
 
         if interbroker_security_protocol is None:
             interbroker_security_protocol = security_protocol
@@ -210,9 +235,9 @@ class SecurityConfig(TemplateRenderer):
         self.kraft_tls = kraft_tls
 
         if tls_version is not None:
-            self.properties.update({'tls.version' : tls_version})
+            self.properties['tls.version'] = tls_version
 
-        self.properties.update(self.listener_security_config.client_listener_overrides)
+        self.properties |= self.listener_security_config.client_listener_overrides
         self.jaas_override_variables = jaas_override_variables or {}
 
         self.calc_has_sasl()
@@ -268,17 +293,17 @@ class SecurityConfig(TemplateRenderer):
         self.has_ssl = self.has_ssl or self.is_ssl(security_protocol)
 
     def setup_ssl(self, node):
-        node.account.ssh("mkdir -p %s" % SecurityConfig.CONFIG_DIR, allow_fail=False)
+        node.account.ssh(f"mkdir -p {SecurityConfig.CONFIG_DIR}", allow_fail=False)
         node.account.copy_to(SecurityConfig.ssl_stores.truststore_path, SecurityConfig.TRUSTSTORE_PATH)
         SecurityConfig.ssl_stores.generate_and_copy_keystore(node)
 
     def setup_sasl(self, node):
-        node.account.ssh("mkdir -p %s" % SecurityConfig.CONFIG_DIR, allow_fail=False)
-        jaas_conf_file = "jaas.conf"
+        node.account.ssh(f"mkdir -p {SecurityConfig.CONFIG_DIR}", allow_fail=False)
         java_version = node.account.ssh_capture("java -version")
 
         jaas_conf = None
         if 'sasl.jaas.config' not in self.properties:
+            jaas_conf_file = "jaas.conf"
             jaas_conf = self.render_jaas_config(
                 jaas_conf_file,
                 {
@@ -336,7 +361,7 @@ class SecurityConfig(TemplateRenderer):
 
     def clean_node(self, node):
         if self.security_protocol != SecurityConfig.PLAINTEXT:
-            node.account.ssh("rm -rf %s" % SecurityConfig.CONFIG_DIR, allow_fail=False)
+            node.account.ssh(f"rm -rf {SecurityConfig.CONFIG_DIR}", allow_fail=False)
 
     def get_property(self, prop_name, template_props=""):
         """
@@ -357,7 +382,10 @@ class SecurityConfig(TemplateRenderer):
         return security_protocol in SecurityConfig.SASL_SECURITY_PROTOCOLS
 
     def is_sasl_scram(self, sasl_mechanism):
-        return sasl_mechanism == SecurityConfig.SASL_MECHANISM_SCRAM_SHA_256 or sasl_mechanism == SecurityConfig.SASL_MECHANISM_SCRAM_SHA_512
+        return sasl_mechanism in [
+            SecurityConfig.SASL_MECHANISM_SCRAM_SHA_256,
+            SecurityConfig.SASL_MECHANISM_SCRAM_SHA_512,
+        ]
 
     @property
     def security_protocol(self):
@@ -401,13 +429,12 @@ class SecurityConfig(TemplateRenderer):
 
     @property
     def kafka_opts(self):
-        if self.has_sasl:
-            if self.static_jaas_conf:
-                return "\"-Djava.security.auth.login.config=%s -Djava.security.krb5.conf=%s\"" % (SecurityConfig.JAAS_CONF_PATH, SecurityConfig.KRB5CONF_PATH)
-            else:
-                return "\"-Djava.security.krb5.conf=%s\"" % SecurityConfig.KRB5CONF_PATH
-        else:
+        if not self.has_sasl:
             return ""
+        if self.static_jaas_conf:
+            return "\"-Djava.security.auth.login.config=%s -Djava.security.krb5.conf=%s\"" % (SecurityConfig.JAAS_CONF_PATH, SecurityConfig.KRB5CONF_PATH)
+        else:
+            return "\"-Djava.security.krb5.conf=%s\"" % SecurityConfig.KRB5CONF_PATH
 
     def props(self, prefix=''):
         """

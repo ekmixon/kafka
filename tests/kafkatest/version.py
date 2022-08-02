@@ -44,19 +44,14 @@ class KafkaVersion(LooseVersion):
         LooseVersion.__init__(self, version_string)
 
     def __str__(self):
-        if self.is_dev:
-            return "dev"
-        else:
-            return LooseVersion.__str__(self)
+        return "dev" if self.is_dev else LooseVersion.__str__(self)
 
     def _cmp(self, other):
         if isinstance(other, str):
             other = KafkaVersion(other)
 
         if other.is_dev:
-            if self.is_dev:
-                return 0
-            return -1
+            return 0 if self.is_dev else -1
         elif self.is_dev:
             return 1
 

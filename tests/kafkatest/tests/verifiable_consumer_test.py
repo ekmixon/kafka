@@ -33,10 +33,9 @@ class VerifiableConsumerTest(KafkaTest):
         self.consumption_timeout_sec = max(self.PRODUCER_REQUEST_TIMEOUT_SEC + 5, 2 * session_timeout_sec)
 
     def _all_partitions(self, topic, num_partitions):
-        partitions = set()
-        for i in range(num_partitions):
-            partitions.add(TopicPartition(topic=topic, partition=i))
-        return partitions
+        return {
+            TopicPartition(topic=topic, partition=i) for i in range(num_partitions)
+        }
 
     def _partitions(self, assignment):
         partitions = []

@@ -72,8 +72,11 @@ class TransactionalMessageCopier(KafkaPathResolverMixin, BackgroundThreadService
         }
 
     def _worker(self, idx, node):
-        node.account.ssh("mkdir -p %s" % TransactionalMessageCopier.PERSISTENT_ROOT,
-                         allow_fail=False)
+        node.account.ssh(
+            f"mkdir -p {TransactionalMessageCopier.PERSISTENT_ROOT}",
+            allow_fail=False,
+        )
+
         # Create and upload log properties
         log_config = self.render('tools_log4j.properties',
                                  log_file=TransactionalMessageCopier.LOG_FILE)
@@ -94,7 +97,7 @@ class TransactionalMessageCopier(KafkaPathResolverMixin, BackgroundThreadService
                         self.logger.info("%s: consumed %d, remaining %d" %
                                          (self.transactional_id, self.consumed, self.remaining))
                         if "shutdown_complete" in data:
-                           if self.remaining == 0:
+                            if self.remaining == 0:
                                 # We are only finished if the remaining
                                 # messages at the time of shutdown is 0.
                                 #
@@ -102,30 +105,33 @@ class TransactionalMessageCopier(KafkaPathResolverMixin, BackgroundThreadService
                                 # a 'shutdown complete' messages even though
                                 # there are unprocessed messages, causing
                                 # tests to fail.
-                                self.logger.info("%s : Finished message copy" % self.transactional_id)
+                                self.logger.info(f"{self.transactional_id} : Finished message copy")
                                 self.message_copy_finished = True
-                           else:
-                               self.logger.info("%s : Shut down without finishing message copy." %\
-                                                self.transactional_id)
+                            else:
+                                self.logger.info(
+                                    f"{self.transactional_id} : Shut down without finishing message copy."
+                                )
+
         except RemoteCommandError as e:
             self.logger.debug("Got exception while reading output from copier, \
                               probably because it was SIGKILL'd (exit code 137): %s" % str(e))
 
     def start_cmd(self, node, idx):
-        cmd  = "export LOG_DIR=%s;" % TransactionalMessageCopier.LOG_DIR
-        cmd += " export KAFKA_OPTS=%s;" % self.security_config.kafka_opts
+        cmd = f"export LOG_DIR={TransactionalMessageCopier.LOG_DIR};"
+        cmd += f" export KAFKA_OPTS={self.security_config.kafka_opts};"
         cmd += " export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%s\"; " % TransactionalMessageCopier.LOG4J_CONFIG
         cmd += self.path.script("kafka-run-class.sh", node) + " org.apache.kafka.tools." + "TransactionalMessageCopier"
-        cmd += " --broker-list %s" % self.kafka.bootstrap_servers(self.security_config.security_protocol)
-        cmd += " --transactional-id %s" % self.transactional_id
-        cmd += " --consumer-group %s" % self.consumer_group
-        cmd += " --input-topic %s" % self.input_topic
-        cmd += " --output-topic %s" % self.output_topic
-        cmd += " --input-partition %s" % str(self.input_partition)
-        cmd += " --transaction-size %s" % str(self.transaction_size)
+        cmd += f" --broker-list {self.kafka.bootstrap_servers(self.security_config.security_protocol)}"
+
+        cmd += f" --transactional-id {self.transactional_id}"
+        cmd += f" --consumer-group {self.consumer_group}"
+        cmd += f" --input-topic {self.input_topic}"
+        cmd += f" --output-topic {self.output_topic}"
+        cmd += f" --input-partition {str(self.input_partition)}"
+        cmd += f" --transaction-size {str(self.transaction_size)}"
 
         if self.transaction_timeout is not None:
-            cmd += " --transaction-timeout %s" % str(self.transaction_timeout)
+            cmd += f" --transaction-timeout {str(self.transaction_timeout)}"
 
         if self.enable_random_aborts:
             cmd += " --enable-random-aborts"
@@ -137,23 +143,23 @@ class TransactionalMessageCopier(KafkaPathResolverMixin, BackgroundThreadService
             cmd += " --group-mode"
 
         if self.max_messages > 0:
-            cmd += " --max-messages %s" % str(self.max_messages)
-        cmd += " 2>> %s | tee -a %s &" % (TransactionalMessageCopier.STDERR_CAPTURE, TransactionalMessageCopier.STDOUT_CAPTURE)
+            cmd += f" --max-messages {str(self.max_messages)}"
+        cmd += f" 2>> {TransactionalMessageCopier.STDERR_CAPTURE} | tee -a {TransactionalMessageCopier.STDOUT_CAPTURE} &"
+
 
         return cmd
 
     def clean_node(self, node):
         self.kill_node(node, clean_shutdown=False)
-        node.account.ssh("rm -rf " + self.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(f"rm -rf {self.PERSISTENT_ROOT}", allow_fail=False)
         self.security_config.clean_node(node)
 
     def pids(self, node):
         try:
             cmd = "jps | grep -i TransactionalMessageCopier | awk '{print $1}'"
-            pid_arr = [pid for pid in node.account.ssh_capture(cmd, allow_fail=True, callback=int)]
-            return pid_arr
+            return list(node.account.ssh_capture(cmd, allow_fail=True, callback=int))
         except (RemoteCommandError, ValueError) as e:
-            self.logger.error("Could not list pids: %s" % str(e))
+            self.logger.error(f"Could not list pids: {str(e)}")
             return []
 
     def alive(self, node):
@@ -161,20 +167,29 @@ class TransactionalMessageCopier(KafkaPathResolverMixin, BackgroundThreadService
 
     def start_node(self, node):
         BackgroundThreadService.start_node(self, node)
-        wait_until(lambda: self.alive(node), timeout_sec=60, err_msg="Node %s: Message Copier failed to start" % str(node.account))
+        wait_until(
+            lambda: self.alive(node),
+            timeout_sec=60,
+            err_msg=f"Node {str(node.account)}: Message Copier failed to start",
+        )
 
     def kill_node(self, node, clean_shutdown=True):
         pids = self.pids(node)
         sig = signal.SIGTERM if clean_shutdown else signal.SIGKILL
         for pid in pids:
             node.account.signal(pid, sig)
-        wait_until(lambda: len(self.pids(node)) == 0, timeout_sec=60, err_msg="Node %s: Message Copier failed to stop" % str(node.account))
+        wait_until(
+            lambda: len(self.pids(node)) == 0,
+            timeout_sec=60,
+            err_msg=f"Node {str(node.account)}: Message Copier failed to stop",
+        )
 
     def stop_node(self, node, clean_shutdown=True):
         self.kill_node(node, clean_shutdown)
         stopped = self.wait_node(node, timeout_sec=self.stop_timeout_sec)
-        assert stopped, "Node %s: did not stop within the specified timeout of %s seconds" % \
-            (str(node.account), str(self.stop_timeout_sec))
+        assert (
+            stopped
+        ), f"Node {str(node.account)}: did not stop within the specified timeout of {str(self.stop_timeout_sec)} seconds"
 
     def restart(self, clean_shutdown):
         if self.is_done:
@@ -189,10 +204,9 @@ class TransactionalMessageCopier(KafkaPathResolverMixin, BackgroundThreadService
     def try_parse_json(self, string):
         """Try to parse a string as json. Return None if not parseable."""
         try:
-            record = json.loads(string)
-            return record
+            return json.loads(string)
         except ValueError:
-            self.logger.debug("Could not parse as json: %s" % str(string))
+            self.logger.debug(f"Could not parse as json: {str(string)}")
             return None
 
     @property

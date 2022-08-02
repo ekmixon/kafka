@@ -69,7 +69,7 @@ class ZooKeeperAuthorizerTest(Test):
         # alter client quotas
         node = self.kafka.nodes[0]
         alter_client_quotas_cmd = "%s --entity-name foo --entity-type clients --alter --add-config consumer_byte_rate=10000" % \
-               (self.kafka.kafka_configs_cmd_with_optional_security_settings(node, force_use_zk_connection=False))
+                   (self.kafka.kafka_configs_cmd_with_optional_security_settings(node, force_use_zk_connection=False))
         alter_client_quotas_cmd_log_msg = "Running alter client quotas command with client/non-broker credentials...\n%s" % alter_client_quotas_cmd
 
         self.logger.info(alter_client_quotas_cmd_log_msg)
@@ -90,7 +90,7 @@ class ZooKeeperAuthorizerTest(Test):
 
         # the alter client quotas command should now fail
         try:
-            self.logger.info("Expecting this to fail: %s" % alter_client_quotas_cmd_log_msg)
+            self.logger.info(f"Expecting this to fail: {alter_client_quotas_cmd_log_msg}")
             node.account.ssh(alter_client_quotas_cmd)
             raise Exception("Expected alter client quotas command to fail with an authorization error, but it succeeded")
         except RemoteCommandError as e:

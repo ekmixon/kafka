@@ -97,9 +97,8 @@ class TruncationTest(VerifiableConsumerTest):
             new_total = consumer.total_consumed()
             if new_total == this.last_total:
                 return True
-            else:
-                this.last_total = new_total
-                return False
+            this.last_total = new_total
+            return False
 
         self.last_total = consumer.total_consumed()
         wait_until(lambda: none_consumed(self, consumer),

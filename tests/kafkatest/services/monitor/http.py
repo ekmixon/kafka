@@ -59,8 +59,11 @@ class HttpMetricsCollector(object):
         self._httpd.parent = self
         self._httpd.metrics = self._http_metrics
 
-        self._http_metrics_thread = Thread(target=self._run_http_metrics_httpd,
-                                           name='http-metrics-thread[%s]' % str(self))
+        self._http_metrics_thread = Thread(
+            target=self._run_http_metrics_httpd,
+            name=f'http-metrics-thread[{str(self)}]',
+        )
+
         self._http_metrics_thread.start()
 
         self._forwarders = {}

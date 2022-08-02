@@ -51,7 +51,10 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
         self.kafka_opts = ""
         self.zk_sasl = zk_sasl
         if (zk_client_secure_port or zk_tls_encrypt_only) and not version.supports_tls_to_zookeeper():
-            raise Exception("Cannot use TLS with a ZooKeeper version that does not support it: %s" % str(version))
+            raise Exception(
+                f"Cannot use TLS with a ZooKeeper version that does not support it: {str(version)}"
+            )
+
         if not zk_client_port and not zk_client_secure_port:
             raise Exception("Cannot disable both ZK clientPort and clientSecurePort")
         self.zk_client_port = zk_client_port
@@ -77,7 +80,9 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
 
     @property
     def zk_principals(self):
-        return " zkclient "  + ' '.join(['zookeeper/' + zk_node.account.hostname for zk_node in self.nodes])
+        return " zkclient " + ' '.join(
+            [f'zookeeper/{zk_node.account.hostname}' for zk_node in self.nodes]
+        )
 
     def restart_cluster(self):
         for node in self.nodes:
@@ -92,21 +97,30 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
         idx = self.idx(node)
         self.logger.info("Starting ZK node %d on %s", idx, node.account.hostname)
 
-        node.account.ssh("mkdir -p %s" % ZookeeperService.DATA)
+        node.account.ssh(f"mkdir -p {ZookeeperService.DATA}")
         node.account.ssh("echo %d > %s/myid" % (idx, ZookeeperService.DATA))
 
         self.security_config.setup_node(node)
         config_file = self.render('zookeeper.properties')
         self.logger.info("zookeeper.properties:")
         self.logger.info(config_file)
-        node.account.create_file("%s/zookeeper.properties" % ZookeeperService.ROOT, config_file)
+        node.account.create_file(
+            f"{ZookeeperService.ROOT}/zookeeper.properties", config_file
+        )
 
-        heap_kafka_opts = "-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=%s" % self.logs["zk_heap_dump_file"]["path"]
-        other_kafka_opts = self.kafka_opts + ' ' + self.security_system_properties \
-            if self.security_config.zk_sasl else self.kafka_opts
+
+        heap_kafka_opts = f'-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath={self.logs["zk_heap_dump_file"]["path"]}'
+
+        other_kafka_opts = (
+            f'{self.kafka_opts} {self.security_system_properties}'
+            if self.security_config.zk_sasl
+            else self.kafka_opts
+        )
+
         start_cmd = "export KAFKA_OPTS=\"%s %s\";" % (heap_kafka_opts, other_kafka_opts)
-        start_cmd += "%s " % self.path.script("zookeeper-server-start.sh", node)
-        start_cmd += "%s/zookeeper.properties &>> %s &" % (ZookeeperService.ROOT, self.logs["zk_log"]["path"])
+        start_cmd += f'{self.path.script("zookeeper-server-start.sh", node)} '
+        start_cmd += f'{ZookeeperService.ROOT}/zookeeper.properties &>> {self.logs["zk_log"]["path"]} &'
+
         node.account.ssh(start_cmd)
 
         wait_until(lambda: self.listening(node), timeout_sec=30, err_msg="Zookeeper node failed to start")
@@ -114,7 +128,7 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
     def listening(self, node):
         try:
             port = 2181 if self.zk_client_port else 2182
-            cmd = "nc -z %s %s" % (node.account.hostname, port)
+            cmd = f"nc -z {node.account.hostname} {port}"
             node.account.ssh_output(cmd, allow_fail=False)
             self.logger.debug("Zookeeper started accepting connections at: '%s:%s')", node.account.hostname, port)
             return True
@@ -137,13 +151,15 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
     def clean_node(self, node):
         self.logger.info("Cleaning ZK node %d on %s", self.idx(node), node.account.hostname)
         if self.alive(node):
-            self.logger.warn("%s %s was still alive at cleanup time. Killing forcefully..." %
-                             (self.__class__.__name__, node.account))
+            self.logger.warn(
+                f"{self.__class__.__name__} {node.account} was still alive at cleanup time. Killing forcefully..."
+            )
+
         node.account.kill_java_processes(self.java_class_name(),
                                          clean_shutdown=False, allow_fail=True)
         node.account.kill_java_processes(self.java_cli_class_name(),
                                          clean_shutdown=False, allow_fail=False)
-        node.account.ssh("rm -rf -- %s" % ZookeeperService.ROOT, allow_fail=False)
+        node.account.ssh(f"rm -rf -- {ZookeeperService.ROOT}", allow_fail=False)
 
 
     # force_tls is a necessary option for the case where we define both encrypted and non-encrypted ports
@@ -156,10 +172,20 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
                          for node in self.nodes])
 
     def zkTlsConfigFileOption(self, forZooKeeperMain=False):
-        if not self.zk_client_secure_port:
-            return ""
-        return ("-zk-tls-config-file " if forZooKeeperMain else "--zk-tls-config-file ") + \
-               (SecurityConfig.ZK_CLIENT_TLS_ENCRYPT_ONLY_CONFIG_PATH if self.zk_tls_encrypt_only else SecurityConfig.ZK_CLIENT_MUTUAL_AUTH_CONFIG_PATH)
+        return (
+            (
+                "-zk-tls-config-file "
+                if forZooKeeperMain
+                else "--zk-tls-config-file "
+            )
+            + (
+                SecurityConfig.ZK_CLIENT_TLS_ENCRYPT_ONLY_CONFIG_PATH
+                if self.zk_tls_encrypt_only
+                else SecurityConfig.ZK_CLIENT_MUTUAL_AUTH_CONFIG_PATH
+            )
+            if self.zk_client_secure_port
+            else ""
+        )
 
     #
     # This call is used to simulate a rolling upgrade to enable/disable
@@ -188,7 +214,7 @@ class ZookeeperService(KafkaPathResolverMixin, Service):
 
         kafka_run_class = self.path.script("kafka-run-class.sh", DEV_BRANCH)
         cmd = "%s %s -server %s %s get %s" % \
-              (kafka_run_class, self.java_cli_class_name(), self.connect_setting(force_tls=self.zk_client_secure_port),
+                  (kafka_run_class, self.java_cli_class_name(), self.connect_setting(force_tls=self.zk_client_secure_port),
                self.zkTlsConfigFileOption(True),
                chroot_path)
         self.logger.debug(cmd)

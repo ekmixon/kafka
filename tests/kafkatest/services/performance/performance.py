@@ -22,7 +22,7 @@ class PerformanceService(KafkaPathResolverMixin, BackgroundThreadService):
     def __init__(self, context=None, num_nodes=0, root="/mnt/*", stop_timeout_sec=30):
         super(PerformanceService, self).__init__(context, num_nodes)
         self.results = [None] * self.num_nodes
-        self.stats = [[] for x in range(self.num_nodes)]
+        self.stats = [[] for _ in range(self.num_nodes)]
         self.stop_timeout_sec = stop_timeout_sec
         self.root = root
 
@@ -39,12 +39,13 @@ class PerformanceService(KafkaPathResolverMixin, BackgroundThreadService):
         node.account.kill_java_processes(self.java_class_name(), clean_shutdown=True, allow_fail=True)
 
         stopped = self.wait_node(node, timeout_sec=self.stop_timeout_sec)
-        assert stopped, "Node %s: did not stop within the specified timeout of %s seconds" % \
-                        (str(node.account), str(self.stop_timeout_sec))
+        assert (
+            stopped
+        ), f"Node {str(node.account)}: did not stop within the specified timeout of {str(self.stop_timeout_sec)} seconds"
 
     def clean_node(self, node):
         node.account.kill_java_processes(self.java_class_name(), clean_shutdown=False, allow_fail=True)
-        node.account.ssh("rm -rf -- %s" % self.root, allow_fail=False)
+        node.account.ssh(f"rm -rf -- {self.root}", allow_fail=False)
 
 
 def throughput(records_per_sec, mb_per_sec):
@@ -66,7 +67,7 @@ def latency(latency_50th_ms, latency_99th_ms, latency_999th_ms):
 
 def compute_aggregate_throughput(perf):
     """Helper method for computing throughput after running a performance service."""
-    aggregate_rate = sum([r['records_per_sec'] for r in perf.results])
-    aggregate_mbps = sum([r['mbps'] for r in perf.results])
+    aggregate_rate = sum(r['records_per_sec'] for r in perf.results)
+    aggregate_mbps = sum(r['mbps'] for r in perf.results)
 
     return throughput(aggregate_rate, aggregate_mbps)

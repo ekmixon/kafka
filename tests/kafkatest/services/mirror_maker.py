@@ -71,7 +71,7 @@ class MirrorMaker(KafkaPathResolverMixin, Service):
         self.target = target
 
         self.offsets_storage = offsets_storage.lower()
-        if not (self.offsets_storage in ["kafka", "zookeeper"]):
+        if self.offsets_storage not in ["kafka", "zookeeper"]:
             raise Exception("offsets_storage should be 'kafka' or 'zookeeper'. Instead found %s" % self.offsets_storage)
 
         self.offset_commit_interval_ms = offset_commit_interval_ms
@@ -83,18 +83,19 @@ class MirrorMaker(KafkaPathResolverMixin, Service):
         self.partition_assignment_strategy = None
 
     def start_cmd(self, node):
-        cmd = "export LOG_DIR=%s;" % MirrorMaker.LOG_DIR
+        cmd = f"export LOG_DIR={MirrorMaker.LOG_DIR};"
         cmd += " export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%s\";" % MirrorMaker.LOG4J_CONFIG
-        cmd += " export KAFKA_OPTS=%s;" % self.security_config.kafka_opts
+        cmd += f" export KAFKA_OPTS={self.security_config.kafka_opts};"
         # add external dependencies, for instance for interceptors
         if self.external_jars is not None:
-            cmd += "for file in %s; do CLASSPATH=$CLASSPATH:$file; done; " % self.external_jars
+            cmd += f"for file in {self.external_jars}; do CLASSPATH=$CLASSPATH:$file; done; "
+
             cmd += "export CLASSPATH; "
-        cmd += " %s %s" % (self.path.script("kafka-run-class.sh", node),
-                           self.java_class_name())
-        cmd += " --consumer.config %s" % MirrorMaker.CONSUMER_CONFIG
-        cmd += " --producer.config %s" % MirrorMaker.PRODUCER_CONFIG
-        cmd += " --offset.commit.interval.ms %s" % str(self.offset_commit_interval_ms)
+        cmd += f' {self.path.script("kafka-run-class.sh", node)} {self.java_class_name()}'
+
+        cmd += f" --consumer.config {MirrorMaker.CONSUMER_CONFIG}"
+        cmd += f" --producer.config {MirrorMaker.PRODUCER_CONFIG}"
+        cmd += f" --offset.commit.interval.ms {str(self.offset_commit_interval_ms)}"
         if isinstance(self.num_streams, int):
             cmd += " --num.streams %d" % self.num_streams
         else:
@@ -103,7 +104,7 @@ class MirrorMaker(KafkaPathResolverMixin, Service):
         if self.whitelist is not None:
             cmd += " --whitelist=\"%s\"" % self.whitelist
 
-        cmd += " 1>> %s 2>> %s &" % (MirrorMaker.LOG_FILE, MirrorMaker.LOG_FILE)
+        cmd += f" 1>> {MirrorMaker.LOG_FILE} 2>> {MirrorMaker.LOG_FILE} &"
         return cmd
 
     def pids(self, node):
@@ -113,8 +114,8 @@ class MirrorMaker(KafkaPathResolverMixin, Service):
         return len(self.pids(node)) > 0
 
     def start_node(self, node):
-        node.account.ssh("mkdir -p %s" % MirrorMaker.PERSISTENT_ROOT, allow_fail=False)
-        node.account.ssh("mkdir -p %s" % MirrorMaker.LOG_DIR, allow_fail=False)
+        node.account.ssh(f"mkdir -p {MirrorMaker.PERSISTENT_ROOT}", allow_fail=False)
+        node.account.ssh(f"mkdir -p {MirrorMaker.LOG_DIR}", allow_fail=False)
 
         self.security_config = self.source.security_config.client_config()
         self.security_config.setup_node(node)
@@ -153,11 +154,13 @@ class MirrorMaker(KafkaPathResolverMixin, Service):
 
     def clean_node(self, node):
         if self.alive(node):
-            self.logger.warn("%s %s was still alive at cleanup time. Killing forcefully..." %
-                             (self.__class__.__name__, node.account))
+            self.logger.warn(
+                f"{self.__class__.__name__} {node.account} was still alive at cleanup time. Killing forcefully..."
+            )
+
         node.account.kill_java_processes(self.java_class_name(), clean_shutdown=False,
                                          allow_fail=True)
-        node.account.ssh("rm -rf %s" % MirrorMaker.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(f"rm -rf {MirrorMaker.PERSISTENT_ROOT}", allow_fail=False)
         self.security_config.clean_node(node)
 
     def java_class_name(self):

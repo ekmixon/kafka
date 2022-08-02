@@ -45,13 +45,13 @@ class KafkaListener:
         self.sasl_mechanism = sasl_mechanism
 
     def listener(self):
-        return "%s://:%s" % (self.name, str(self.port_number))
+        return f"{self.name}://:{str(self.port_number)}"
 
     def advertised_listener(self, node):
-        return "%s://%s:%s" % (self.name, node.account.hostname, str(self.port_number))
+        return f"{self.name}://{node.account.hostname}:{str(self.port_number)}"
 
     def listener_security_protocol(self):
-        return "%s:%s" % (self.name, self.security_protocol)
+        return f"{self.name}:{self.security_protocol}"
 
 class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
     """

@@ -62,7 +62,7 @@ class Log4jAppenderTest(Test):
 
     def custom_message_validator(self, msg):
         if msg and "INFO : org.apache.kafka.tools.VerifiableLog4jAppender" in msg:
-            self.logger.debug("Received message: %s" % msg)
+            self.logger.debug(f"Received message: {msg}")
             self.messages_received_count += 1
 
     def start_consumer(self):

@@ -54,10 +54,14 @@ class EndToEndLatencyService(PerformanceService):
         security_protocol = self.security_config.security_protocol
 
         if not version.consumer_supports_bootstrap_server():
-            assert security_protocol == SecurityConfig.PLAINTEXT, \
-                "Security protocol %s is only supported if version >= 0.9.0.0, version %s" % (self.security_config, str(version))
-            assert compression_type == "none", \
-                "Compression type %s is only supported if version >= 0.9.0.0, version %s" % (compression_type, str(version))
+            assert (
+                security_protocol == SecurityConfig.PLAINTEXT
+            ), f"Security protocol {self.security_config} is only supported if version >= 0.9.0.0, version {str(version)}"
+
+            assert (
+                compression_type == "none"
+            ), f"Compression type {compression_type} is only supported if version >= 0.9.0.0, version {str(version)}"
+
 
         self.args = {
             'topic': topic,
@@ -99,7 +103,10 @@ class EndToEndLatencyService(PerformanceService):
         return cmd
 
     def _worker(self, idx, node):
-        node.account.ssh("mkdir -p %s" % EndToEndLatencyService.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(
+            f"mkdir -p {EndToEndLatencyService.PERSISTENT_ROOT}", allow_fail=False
+        )
+
 
         log_config = self.render('tools_log4j.properties', log_file=EndToEndLatencyService.LOG_FILE)
 

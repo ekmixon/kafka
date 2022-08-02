@@ -214,21 +214,21 @@ class OffsetValidationTest(VerifiableConsumerTest):
             check_condition = num_revokes_after_bounce == 0
 
         assert check_condition, \
-            "Total revoked count %d does not match the expectation of having 0 revokes as %d" % \
-            (num_revokes_after_bounce, check_condition)
+                "Total revoked count %d does not match the expectation of having 0 revokes as %d" % \
+                (num_revokes_after_bounce, check_condition)
 
         consumer.stop_all()
         if clean_shutdown:
             # if the total records consumed matches the current position, we haven't seen any duplicates
             # this can only be guaranteed with a clean shutdown
             assert consumer.current_position(partition) == consumer.total_consumed(), \
-                "Total consumed records %d did not match consumed position %d" % \
-                (consumer.total_consumed(), consumer.current_position(partition))
+                    "Total consumed records %d did not match consumed position %d" % \
+                    (consumer.total_consumed(), consumer.current_position(partition))
         else:
             # we may have duplicates in a hard failure
             assert consumer.current_position(partition) <= consumer.total_consumed(), \
-                "Current position %d greater than the total number of consumed records %d" % \
-                (consumer.current_position(partition), consumer.total_consumed())
+                    "Current position %d greater than the total number of consumed records %d" % \
+                    (consumer.current_position(partition), consumer.total_consumed())
 
     @cluster(num_nodes=7)
     @matrix(bounce_mode=["all", "rolling"], metadata_quorum=quorum.all_non_upgrade)

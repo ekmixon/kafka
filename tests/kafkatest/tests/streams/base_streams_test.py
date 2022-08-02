@@ -65,17 +65,21 @@ class BaseStreamsTest(KafkaTest):
         producer = self.get_producer(topic, num_messages)
         producer.start()
 
-        wait_until(lambda: producer.num_acked >= num_messages,
-                   timeout_sec=timeout_sec,
-                   err_msg="At %s failed to send messages " % test_state)
+        wait_until(
+            lambda: producer.num_acked >= num_messages,
+            timeout_sec=timeout_sec,
+            err_msg=f"At {test_state} failed to send messages ",
+        )
 
     def assert_consume(self, client_id, test_state, topic, num_messages=5, timeout_sec=60):
         consumer = self.get_consumer(client_id, topic, num_messages)
         consumer.start()
 
-        wait_until(lambda: consumer.total_consumed() >= num_messages,
-                   timeout_sec=timeout_sec,
-                   err_msg="At %s streams did not process messages in %s seconds " % (test_state, timeout_sec))
+        wait_until(
+            lambda: consumer.total_consumed() >= num_messages,
+            timeout_sec=timeout_sec,
+            err_msg=f"At {test_state} streams did not process messages in {timeout_sec} seconds ",
+        )
 
     @staticmethod
     def get_configs(extra_configs=""):
@@ -85,10 +89,7 @@ class BaseStreamsTest(KafkaTest):
         request_timeout = "producer.request.timeout.ms=15000"
         max_block_ms = "producer.max.block.ms=30000"
 
-        # java code expects configs in key=value,key=value format
-        updated_configs = consumer_poll_ms + "," + retries_config + "," + request_timeout + "," + max_block_ms + extra_configs
-
-        return updated_configs
+        return f"{consumer_poll_ms},{retries_config},{request_timeout},{max_block_ms}{extra_configs}"
 
     def wait_for_verification(self, processor, message, file, num_lines=1):
         wait_until(lambda: self.verify_from_file(processor, message, file) >= num_lines,

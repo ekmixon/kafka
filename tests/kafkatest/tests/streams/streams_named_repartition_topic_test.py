@@ -89,9 +89,12 @@ class StreamsNamedRepartitionTopicTest(Test):
     def verify_processing(self, processors):
         for processor in processors:
             with processor.node.account.monitor_log(processor.STDOUT_FILE) as monitor:
-                monitor.wait_until(self.pattern,
-                                   timeout_sec=60,
-                                   err_msg="Never saw processing of %s " % self.pattern + str(processor.node.account))
+                monitor.wait_until(
+                    self.pattern,
+                    timeout_sec=60,
+                    err_msg=f"Never saw processing of {self.pattern} "
+                    + str(processor.node.account),
+                )
 
     def set_topics(self, processor):
         processor.INPUT_TOPIC = self.input_topic

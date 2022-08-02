@@ -91,24 +91,35 @@ class MiniKdc(KafkaPathResolverMixin, Service):
         move(abs_path, file_path)
 
     def start_node(self, node):
-        node.account.ssh("mkdir -p %s" % MiniKdc.WORK_DIR, allow_fail=False)
+        node.account.ssh(f"mkdir -p {MiniKdc.WORK_DIR}", allow_fail=False)
         props_file = self.render('minikdc.properties',  node=node)
         node.account.create_file(MiniKdc.PROPS_FILE, props_file)
         self.logger.info("minikdc.properties")
         self.logger.info(props_file)
 
-        kafka_principals = ' '.join(['kafka/' + kafka_node.account.hostname for kafka_node in self.kafka_nodes])
-        principals = 'client ' + kafka_principals + ' ' + self.extra_principals
-        self.logger.info("Starting MiniKdc with principals " + principals)
+        kafka_principals = ' '.join(
+            [
+                f'kafka/{kafka_node.account.hostname}'
+                for kafka_node in self.kafka_nodes
+            ]
+        )
+
+        principals = f'client {kafka_principals} {self.extra_principals}'
+        self.logger.info(f"Starting MiniKdc with principals {principals}")
 
         core_libs_jar = self.path.jar(CORE_LIBS_JAR_NAME, DEV_BRANCH)
         core_dependant_test_libs_jar = self.path.jar(CORE_DEPENDANT_TEST_LIBS_JAR_NAME, DEV_BRANCH)
 
-        cmd = "for file in %s; do CLASSPATH=$CLASSPATH:$file; done;" % core_libs_jar
-        cmd += " for file in %s; do CLASSPATH=$CLASSPATH:$file; done;" % core_dependant_test_libs_jar
+        cmd = f"for file in {core_libs_jar}; do CLASSPATH=$CLASSPATH:$file; done;"
+        cmd += f" for file in {core_dependant_test_libs_jar}; do CLASSPATH=$CLASSPATH:$file; done;"
+
         cmd += " export CLASSPATH;"
-        cmd += " %s kafka.security.minikdc.MiniKdc %s %s %s %s 1>> %s 2>> %s &" % (self.path.script("kafka-run-class.sh", node), MiniKdc.WORK_DIR, MiniKdc.PROPS_FILE, MiniKdc.KEYTAB_FILE, principals, MiniKdc.LOG_FILE, MiniKdc.LOG_FILE)
-        self.logger.debug("Attempting to start MiniKdc on %s with command: %s" % (str(node.account), cmd))
+        cmd += f' {self.path.script("kafka-run-class.sh", node)} kafka.security.minikdc.MiniKdc {MiniKdc.WORK_DIR} {MiniKdc.PROPS_FILE} {MiniKdc.KEYTAB_FILE} {principals} 1>> {MiniKdc.LOG_FILE} 2>> {MiniKdc.LOG_FILE} &'
+
+        self.logger.debug(
+            f"Attempting to start MiniKdc on {str(node.account)} with command: {cmd}"
+        )
+
         with node.account.monitor_log(MiniKdc.LOG_FILE) as monitor:
             node.account.ssh(cmd)
             monitor.wait_until("MiniKdc Running", timeout_sec=60, backoff_sec=1, err_msg="MiniKdc didn't finish startup")
@@ -120,12 +131,12 @@ class MiniKdc(KafkaPathResolverMixin, Service):
         self.replace_in_file(MiniKdc.LOCAL_KRB5CONF_FILE, '0.0.0.0', node.account.hostname)
 
     def stop_node(self, node):
-        self.logger.info("Stopping %s on %s" % (type(self).__name__, node.account.hostname))
+        self.logger.info(f"Stopping {type(self).__name__} on {node.account.hostname}")
         node.account.kill_java_processes("MiniKdc", clean_shutdown=True, allow_fail=False)
 
     def clean_node(self, node):
         node.account.kill_java_processes("MiniKdc", clean_shutdown=False, allow_fail=True)
-        node.account.ssh("rm -rf " + MiniKdc.WORK_DIR, allow_fail=False)
+        node.account.ssh(f"rm -rf {MiniKdc.WORK_DIR}", allow_fail=False)
         if os.path.exists(MiniKdc.LOCAL_KEYTAB_FILE):
             os.remove(MiniKdc.LOCAL_KEYTAB_FILE)
         if os.path.exists(MiniKdc.LOCAL_KRB5CONF_FILE):

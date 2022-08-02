@@ -38,7 +38,7 @@ class KiboshTest(Test):
         self.nodes = self.test_context.cluster.alloc(ClusterSpec.simple_linux(num_nodes))
         for node in self.nodes:
             node.account.logger = self.logger
-            node.account.ssh("mkdir -p -- %s %s" % (KiboshTest.TARGET, KiboshTest.MIRROR))
+            node.account.ssh(f"mkdir -p -- {KiboshTest.TARGET} {KiboshTest.MIRROR}")
         self.kibosh = KiboshService(self.test_context, self.nodes,
                                     KiboshTest.TARGET, KiboshTest.MIRROR)
         for node in self.nodes:
@@ -54,14 +54,13 @@ class KiboshTest(Test):
             self.kibosh.stop()
             self.kibosh = None
         for node in self.nodes:
-            node.account.ssh("rm -rf -- %s %s" % (KiboshTest.TARGET, KiboshTest.MIRROR))
+            node.account.ssh(f"rm -rf -- {KiboshTest.TARGET} {KiboshTest.MIRROR}")
         if self.nodes is not None:
             self.test_context.cluster.free(self.nodes)
             self.nodes = None
 
     @cluster(num_nodes=4)
     def test_kibosh_service(self):
-        pass
         """
         Test that we can bring up kibosh and create a fault.
         """
@@ -72,7 +71,7 @@ class KiboshTest(Test):
 
         def check(self, node, expected_json):
             fault_json = self.kibosh.get_fault_json(node)
-            self.logger.info("Read back: [%s].  Expected: [%s]." % (fault_json, expected_json))
+            self.logger.info(f"Read back: [{fault_json}].  Expected: [{expected_json}].")
             return fault_json == expected_json
 
         wait_until(lambda: check(self, node, '{"faults":[]}'),

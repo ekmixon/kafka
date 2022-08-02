@@ -185,7 +185,10 @@ class StreamsUpgradeTest(Test):
 
         self.driver.stop()
         processor.stop()
-        processor.node.account.ssh_capture("grep SMOKE-TEST-CLIENT-CLOSED %s" % processor.STDOUT_FILE, allow_fail=False)
+        processor.node.account.ssh_capture(
+            f"grep SMOKE-TEST-CLIENT-CLOSED {processor.STDOUT_FILE}",
+            allow_fail=False,
+        )
 
     @cluster(num_nodes=6)
     @matrix(from_version=metadata_1_versions, to_version=[str(DEV_VERSION)])
@@ -290,12 +293,12 @@ class StreamsUpgradeTest(Test):
 
     def get_version_string(self, version):
         if version.startswith("0") or version.startswith("1") \
-          or version.startswith("2.0") or version.startswith("2.1"):
-            return "Kafka version : " + version
+              or version.startswith("2.0") or version.startswith("2.1"):
+            return f"Kafka version : {version}"
         elif "SNAPSHOT" in version:
-            return "Kafka version.*" + self.base_version_number + ".*SNAPSHOT"
+            return f"Kafka version.*{self.base_version_number}.*SNAPSHOT"
         else:
-            return "Kafka version: " + version
+            return f"Kafka version: {version}"
 
     def start_all_nodes_with(self, version):
         kafka_version_str = self.get_version_string(version)
@@ -306,9 +309,12 @@ class StreamsUpgradeTest(Test):
         with node1.account.monitor_log(self.processor1.STDOUT_FILE) as monitor:
             with node1.account.monitor_log(self.processor1.LOG_FILE) as log_monitor:
                 self.processor1.start()
-                log_monitor.wait_until(kafka_version_str,
-                                       timeout_sec=60,
-                                       err_msg="Could not detect Kafka Streams version " + version + " " + str(node1.account))
+                log_monitor.wait_until(
+                    kafka_version_str,
+                    timeout_sec=60,
+                    err_msg=f"Could not detect Kafka Streams version {version} {str(node1.account)}",
+                )
+
                 monitor.wait_until(self.processed_msg,
                                    timeout_sec=60,
                                    err_msg="Never saw output '%s' on " % self.processed_msg + str(node1.account))
@@ -320,9 +326,12 @@ class StreamsUpgradeTest(Test):
             with node2.account.monitor_log(self.processor2.STDOUT_FILE) as second_monitor:
                 with node2.account.monitor_log(self.processor2.LOG_FILE) as log_monitor:
                     self.processor2.start()
-                    log_monitor.wait_until(kafka_version_str,
-                                           timeout_sec=60,
-                                           err_msg="Could not detect Kafka Streams version " + version + " on " + str(node2.account))
+                    log_monitor.wait_until(
+                        kafka_version_str,
+                        timeout_sec=60,
+                        err_msg=f"Could not detect Kafka Streams version {version} on {str(node2.account)}",
+                    )
+
                     first_monitor.wait_until(self.processed_msg,
                                              timeout_sec=60,
                                              err_msg="Never saw output '%s' on " % self.processed_msg + str(node1.account))
@@ -338,9 +347,12 @@ class StreamsUpgradeTest(Test):
                 with node3.account.monitor_log(self.processor3.STDOUT_FILE) as third_monitor:
                     with node3.account.monitor_log(self.processor3.LOG_FILE) as log_monitor:
                         self.processor3.start()
-                        log_monitor.wait_until(kafka_version_str,
-                                               timeout_sec=60,
-                                               err_msg="Could not detect Kafka Streams version " + version + " on " + str(node3.account))
+                        log_monitor.wait_until(
+                            kafka_version_str,
+                            timeout_sec=60,
+                            err_msg=f"Could not detect Kafka Streams version {version} on {str(node3.account)}",
+                        )
+
                         first_monitor.wait_until(self.processed_msg,
                                                  timeout_sec=60,
                                                  err_msg="Never saw output '%s' on " % self.processed_msg + str(node1.account))
@@ -353,7 +365,10 @@ class StreamsUpgradeTest(Test):
 
     @staticmethod
     def prepare_for(processor, version):
-        processor.node.account.ssh("rm -rf " + processor.PERSISTENT_ROOT, allow_fail=False)
+        processor.node.account.ssh(
+            f"rm -rf {processor.PERSISTENT_ROOT}", allow_fail=False
+        )
+
         if version == str(DEV_VERSION):
             processor.set_version("")  # set to TRUNK
         else:

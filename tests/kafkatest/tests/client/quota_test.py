@@ -80,14 +80,14 @@ class QuotaConfig(object):
         force_use_zk_conection = not kafka.all_nodes_configs_command_uses_bootstrap_server()
         node = kafka.nodes[0]
         cmd = "%s --alter --add-config producer_byte_rate=%d,consumer_byte_rate=%d" % \
-              (kafka.kafka_configs_cmd_with_optional_security_settings(node, force_use_zk_conection), producer_byte_rate, consumer_byte_rate)
-        cmd += " --entity-type " + entity_args[0] + self.entity_name_opt(entity_args[1])
+                  (kafka.kafka_configs_cmd_with_optional_security_settings(node, force_use_zk_conection), producer_byte_rate, consumer_byte_rate)
+        cmd += f" --entity-type {entity_args[0]}{self.entity_name_opt(entity_args[1])}"
         if len(entity_args) > 2:
-            cmd += " --entity-type " + entity_args[2] + self.entity_name_opt(entity_args[3])
+            cmd += f" --entity-type {entity_args[2]}{self.entity_name_opt(entity_args[3])}"
         node.account.ssh(cmd)
 
     def entity_name_opt(self, name):
-        return " --entity-default" if name is None else " --entity-name " + name
+        return " --entity-default" if name is None else f" --entity-name {name}"
 
 class QuotaTest(Test):
     """
@@ -101,7 +101,7 @@ class QuotaTest(Test):
         super(QuotaTest, self).__init__(test_context=test_context)
 
         self.topic = 'test_topic'
-        self.logger.info('use topic ' + self.topic)
+        self.logger.info(f'use topic {self.topic}')
 
         self.maximum_client_deviation_percentage = 100.0
         self.maximum_broker_deviation_percentage = 5.0
@@ -143,11 +143,7 @@ class QuotaTest(Test):
         consumer_client_id = self.quota_config.client_id
 
         # Old (pre-2.0) throttling behavior for client does not throttle upon receiving a response with a non-zero throttle time.
-        if old_client_throttling_behavior:
-            client_version = LATEST_1_1
-        else:
-            client_version = DEV_BRANCH
-
+        client_version = LATEST_1_1 if old_client_throttling_behavior else DEV_BRANCH
         # Produce all messages
         producer = ProducerPerformanceService(
             self.test_context, producer_num, self.kafka,
@@ -157,10 +153,20 @@ class QuotaTest(Test):
         producer.run()
 
         # Consume all messages
-        consumer = ConsoleConsumer(self.test_context, consumer_num, self.kafka, self.topic,
-            consumer_timeout_ms=60000, client_id=consumer_client_id,
-            jmx_object_names=['kafka.consumer:type=consumer-fetch-manager-metrics,client-id=%s' % consumer_client_id],
-            jmx_attributes=['bytes-consumed-rate'], version=client_version)
+        consumer = ConsoleConsumer(
+            self.test_context,
+            consumer_num,
+            self.kafka,
+            self.topic,
+            consumer_timeout_ms=60000,
+            client_id=consumer_client_id,
+            jmx_object_names=[
+                f'kafka.consumer:type=consumer-fetch-manager-metrics,client-id={consumer_client_id}'
+            ],
+            jmx_attributes=['bytes-consumed-rate'],
+            version=client_version,
+        )
+
         consumer.run()
 
         for idx, messages in consumer.messages_consumed.items():
@@ -184,8 +190,8 @@ class QuotaTest(Test):
         self.kafka.read_jmx_output_all_nodes()
 
         # validate that number of consumed messages equals number of produced messages
-        produced_num = sum([value['records'] for value in producer.results])
-        consumed_num = sum([len(value) for value in consumer.messages_consumed.values()])
+        produced_num = sum(value['records'] for value in producer.results)
+        consumed_num = sum(len(value) for value in consumer.messages_consumed.values())
         self.logger.info('producer produced %d messages' % produced_num)
         self.logger.info('consumer consumed %d messages' % consumed_num)
         if produced_num != consumed_num:
@@ -201,7 +207,7 @@ class QuotaTest(Test):
         if producer_maximum_bps > producer_quota_bps*(self.maximum_client_deviation_percentage/100+1):
             success = False
             msg += 'maximum producer throughput %.2f bps exceeded producer quota %.2f bps by more than %.1f%%' % \
-                   (producer_maximum_bps, producer_quota_bps, self.maximum_client_deviation_percentage)
+                       (producer_maximum_bps, producer_quota_bps, self.maximum_client_deviation_percentage)
 
         # validate that maximum_broker_byte_in_rate <= producer_quota * (1 + maximum_broker_deviation_percentage/100)
         broker_byte_in_attribute_name = 'kafka.server:type=BrokerTopicMetrics,name=BytesInPerSec:OneMinuteRate'
@@ -211,17 +217,18 @@ class QuotaTest(Test):
         if broker_maximum_byte_in_bps > producer_quota_bps*(self.maximum_broker_deviation_percentage/100+1):
             success = False
             msg += 'maximum broker byte-in rate %.2f bps exceeded producer quota %.2f bps by more than %.1f%%' % \
-                   (broker_maximum_byte_in_bps, producer_quota_bps, self.maximum_broker_deviation_percentage)
+                       (broker_maximum_byte_in_bps, producer_quota_bps, self.maximum_broker_deviation_percentage)
 
         # validate that maximum_consumer_throughput <= consumer_quota * (1 + maximum_client_deviation_percentage/100)
-        consumer_attribute_name = 'kafka.consumer:type=consumer-fetch-manager-metrics,client-id=%s:bytes-consumed-rate' % consumer.client_id
+        consumer_attribute_name = f'kafka.consumer:type=consumer-fetch-manager-metrics,client-id={consumer.client_id}:bytes-consumed-rate'
+
         consumer_maximum_bps = consumer.maximum_jmx_value[consumer_attribute_name]
         consumer_quota_bps = self.quota_config.consumer_quota
         self.logger.info('consumer has maximum throughput %.2f bps with consumer quota %.2f bps' % (consumer_maximum_bps, consumer_quota_bps))
         if consumer_maximum_bps > consumer_quota_bps*(self.maximum_client_deviation_percentage/100+1):
             success = False
             msg += 'maximum consumer throughput %.2f bps exceeded consumer quota %.2f bps by more than %.1f%%' % \
-                   (consumer_maximum_bps, consumer_quota_bps, self.maximum_client_deviation_percentage)
+                       (consumer_maximum_bps, consumer_quota_bps, self.maximum_client_deviation_percentage)
 
         # validate that maximum_broker_byte_out_rate <= consumer_quota * (1 + maximum_broker_deviation_percentage/100)
         broker_byte_out_attribute_name = 'kafka.server:type=BrokerTopicMetrics,name=BytesOutPerSec:OneMinuteRate'
@@ -231,7 +238,7 @@ class QuotaTest(Test):
         if broker_maximum_byte_out_bps > consumer_quota_bps*(self.maximum_broker_deviation_percentage/100+1):
             success = False
             msg += 'maximum broker byte-out rate %.2f bps exceeded consumer quota %.2f bps by more than %.1f%%' % \
-                   (broker_maximum_byte_out_bps, consumer_quota_bps, self.maximum_broker_deviation_percentage)
+                       (broker_maximum_byte_out_bps, consumer_quota_bps, self.maximum_broker_deviation_percentage)
 
         return success, msg
 

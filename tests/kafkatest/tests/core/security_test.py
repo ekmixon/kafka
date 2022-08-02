@@ -49,9 +49,9 @@ class SecurityTest(EndToEndTest):
     def producer_consumer_have_expected_error(self, error):
         try:
             for node in self.producer.nodes:
-                node.account.ssh("grep %s %s" % (error, self.producer.LOG_FILE))
+                node.account.ssh(f"grep {error} {self.producer.LOG_FILE}")
             for node in self.consumer.nodes:
-                node.account.ssh("grep %s %s" % (error, self.consumer.LOG_FILE))
+                node.account.ssh(f"grep {error} {self.consumer.LOG_FILE}")
         except RemoteCommandError:
             return False
 
@@ -94,13 +94,10 @@ class SecurityTest(EndToEndTest):
         SecurityConfig.ssl_stores.valid_hostname = False
         self.kafka.restart_cluster()
 
-        if self.kafka.quorum_info.using_kraft and security_protocol == 'PLAINTEXT':
-            # the inter-broker security protocol using TLS with a hostname verification failure
-            # doesn't impact a producer in case of a single broker with a KRaft Controller,
-            # so confirm that this is in fact the observed behavior
-            self.create_and_start_clients(log_level="INFO")
-            self.run_validation()
-        else:
+        if (
+            not self.kafka.quorum_info.using_kraft
+            or security_protocol != 'PLAINTEXT'
+        ):
             # We need more verbose logging to catch the expected errors
             self.create_and_start_clients(log_level="DEBUG")
 
@@ -121,8 +118,11 @@ class SecurityTest(EndToEndTest):
 
             SecurityConfig.ssl_stores.valid_hostname = True
             self.kafka.restart_cluster()
-            self.create_and_start_clients(log_level="INFO")
-            self.run_validation()
+        # the inter-broker security protocol using TLS with a hostname verification failure
+        # doesn't impact a producer in case of a single broker with a KRaft Controller,
+        # so confirm that this is in fact the observed behavior
+        self.create_and_start_clients(log_level="INFO")
+        self.run_validation()
 
     def create_and_start_clients(self, log_level):
         self.create_producer(log_level=log_level)

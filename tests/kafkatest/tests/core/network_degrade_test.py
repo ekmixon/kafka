@@ -63,13 +63,13 @@ class NetworkDegradeTest(Test):
         r = re.compile(r".*time=(?P<time>[\d.]+)\sms.*")
 
         times = []
-        for line in zk0.account.ssh_capture("ping -i 1 -c 20 %s" % zk1.account.hostname):
-            self.logger.debug("Ping output: %s" % line)
+        for line in zk0.account.ssh_capture(f"ping -i 1 -c 20 {zk1.account.hostname}"):
+            self.logger.debug(f"Ping output: {line}")
             m = r.match(line)
-            if m is not None and m.group("time"):
-                times.append(float(m.group("time")))
-                self.logger.info("Parsed ping time of %d" % float(m.group("time")))
-        self.logger.debug("Captured ping times: %s" % times)
+            if m is not None and m["time"]:
+                times.append(float(m["time"]))
+                self.logger.info("Parsed ping time of %d" % float(m["time"]))
+        self.logger.debug(f"Captured ping times: {times}")
 
         # We expect to see some low ping times (before and after the task runs) as well as high ping times
         # (during the task). For the high time, it's twice the configured latency since both links apply the
@@ -98,30 +98,33 @@ class NetworkDegradeTest(Test):
 
         # start the task and wait
         rate_limit = self.trogdor.create_task(task_name, spec)
-        wait_until(lambda: rate_limit.running(),
-                   timeout_sec=10,
-                   err_msg="%s failed to start within 10 seconds." % rate_limit)
+        wait_until(
+            lambda: rate_limit.running(),
+            timeout_sec=10,
+            err_msg=f"{rate_limit} failed to start within 10 seconds.",
+        )
+
 
         # Run iperf server on zk1, iperf client on zk0
         iperf_server = zk1.account.ssh_capture("iperf -s")
 
         # Wait until iperf server is listening before starting the client
         for line in iperf_server:
-          self.logger.debug("iperf server output %s" % line)
-          if "server listening" in line.lower():
-            self.logger.info("iperf server is ready")
-            break
+            self.logger.debug(f"iperf server output {line}")
+            if "server listening" in line.lower():
+              self.logger.info("iperf server is ready")
+              break
 
         # Capture the measured kbps between the two nodes.
         # [  3]  0.0- 1.0 sec  2952576 KBytes  24187503 Kbits/sec
         r = re.compile(r"^.*\s(?P<rate>[\d.]+)\sKbits/sec$")
 
         measured_rates = []
-        for line in zk0.account.ssh_capture("iperf -i 1 -t 20 -f k -c %s" % zk1.account.hostname):
-            self.logger.info("iperf output %s" % line)
+        for line in zk0.account.ssh_capture(f"iperf -i 1 -t 20 -f k -c {zk1.account.hostname}"):
+            self.logger.info(f"iperf output {line}")
             m = r.match(line)
             if m is not None:
-                measured_rate = float(m.group("rate"))
+                measured_rate = float(m["rate"])
                 measured_rates.append(measured_rate)
                 self.logger.info("Parsed rate of %d kbit/s from iperf" % measured_rate)
 
@@ -133,7 +136,7 @@ class NetworkDegradeTest(Test):
         rate_limit.stop()
         rate_limit.wait_for_done()
 
-        self.logger.info("Measured rates: %s" % measured_rates)
+        self.logger.info(f"Measured rates: {measured_rates}")
 
         # We expect to see measured rates within an order of magnitude of our target rate
         low_kbps = rate_limit_kbit // 10

@@ -64,7 +64,7 @@ class TestSnapshots(ProduceConsumeValidateTest):
         self.logger.info("Starting the cluster and running until snapshot creation")
 
         assert quorum.for_test(self.test_context) in quorum.all_kraft, \
-                "Snapshot test should be run Kraft Modes only"
+                    "Snapshot test should be run Kraft Modes only"
 
         self.kafka.start()
 
@@ -79,7 +79,7 @@ class TestSnapshots(ProduceConsumeValidateTest):
         # Waiting for snapshot creation and first log segment
         # cleanup on all controller nodes
         for node in self.controller_nodes:
-            self.logger.debug("Waiting for snapshot on: %s" % self.kafka.who_am_i(node))
+            self.logger.debug(f"Waiting for snapshot on: {self.kafka.who_am_i(node)}")
             self.wait_for_log_segment_delete(node)
             self.wait_for_snapshot(node)
         self.logger.debug("Verified Snapshots exist on controller nodes")
@@ -87,7 +87,7 @@ class TestSnapshots(ProduceConsumeValidateTest):
     def create_n_topics(self, topic_count):
         for i in range(self.topics_created, topic_count):
             topic = "%s%d" % (TestSnapshots.TOPIC_NAME_PREFIX, i)
-            self.logger.debug("Creating topic %s" % topic)
+            self.logger.debug(f"Creating topic {topic}")
             topic_cfg = {
                 "topic": topic,
                 "partitions": self.partitions,
@@ -101,9 +101,12 @@ class TestSnapshots(ProduceConsumeValidateTest):
     def wait_for_log_segment_delete(self, node):
         file_path = self.kafka.METADATA_FIRST_LOG
         # Wait until the first log segment in metadata log is marked for deletion
-        wait_until(lambda: not self.file_exists(node, file_path),
-                   timeout_sec=100,
-                   backoff_sec=1, err_msg="Not able to verify cleanup of log file %s in a reasonable amount of time" % file_path)
+        wait_until(
+            lambda: not self.file_exists(node, file_path),
+            timeout_sec=100,
+            backoff_sec=1,
+            err_msg=f"Not able to verify cleanup of log file {file_path} in a reasonable amount of time",
+        )
 
     def wait_for_snapshot(self, node):
         # Wait for a snapshot file to show up
@@ -114,15 +117,15 @@ class TestSnapshots(ProduceConsumeValidateTest):
 
     def file_exists(self, node, file_path):
         # Check if the first log segment is cleaned up
-        self.logger.debug("Checking if file %s exists" % file_path)
-        cmd = "ls %s" % file_path
+        self.logger.debug(f"Checking if file {file_path} exists")
+        cmd = f"ls {file_path}"
         files = node.account.ssh_output(cmd, allow_fail=True, combine_stderr=False)
 
         if len(files) is 0:
-            self.logger.debug("File %s does not exist" % file_path)
+            self.logger.debug(f"File {file_path} does not exist")
             return False
         else:
-            self.logger.debug("File %s was found" % file_path)
+            self.logger.debug(f"File {file_path} was found")
             return True
 
     def validate_success(self, topic = None):
@@ -192,7 +195,7 @@ class TestSnapshots(ProduceConsumeValidateTest):
         # Create a topic where the affected broker must be the leader
         broker_topic = "%s%d" % (TestSnapshots.TOPIC_NAME_PREFIX, self.topics_created)
         self.topics_created += 1
-        self.logger.debug("Creating topic %s" % broker_topic)
+        self.logger.debug(f"Creating topic {broker_topic}")
         topic_cfg = {
             "topic": broker_topic,
             "replica-assignment": self.kafka.idx(node),

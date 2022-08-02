@@ -72,24 +72,24 @@ class StreamsStaticMembershipTest(Test):
 
         # do several rolling bounces
         num_bounces = 3
-        for i in range(0, num_bounces):
+        for _ in range(num_bounces):
             for processor in processors:
                 verify_stopped(processor, self.stopped_message)
                 verify_running(processor, self.running_message)
 
         stable_generation = -1
+        num_bounce_generations = num_bounces * numThreads
         for processor in processors:
             generations = extract_generation_from_logs(processor)
-            num_bounce_generations = num_bounces * numThreads
             assert num_bounce_generations <= len(generations), \
-                "Smaller than minimum expected %d generation messages, actual %d" % (num_bounce_generations, len(generations))
+                    "Smaller than minimum expected %d generation messages, actual %d" % (num_bounce_generations, len(generations))
 
             for generation in generations[-num_bounce_generations:]:
                 generation = extract_generation_id(generation)
                 if stable_generation == -1:
                     stable_generation = generation
                 assert stable_generation == generation, \
-                    "Stream rolling bounce have caused unexpected generation bump %d" % generation
+                        "Stream rolling bounce have caused unexpected generation bump %d" % generation
 
         self.verify_processing(processors)
 
@@ -102,9 +102,12 @@ class StreamsStaticMembershipTest(Test):
     def verify_processing(self, processors):
         for processor in processors:
             with processor.node.account.monitor_log(processor.STDOUT_FILE) as monitor:
-                monitor.wait_until(self.pattern,
-                                   timeout_sec=60,
-                                   err_msg="Never saw processing of %s " % self.pattern + str(processor.node.account))
+                monitor.wait_until(
+                    self.pattern,
+                    timeout_sec=60,
+                    err_msg=f"Never saw processing of {self.pattern} "
+                    + str(processor.node.account),
+                )
 
     def set_topics(self, processor):
         processor.INPUT_TOPIC = self.input_topic

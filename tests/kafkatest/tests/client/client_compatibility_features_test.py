@@ -94,22 +94,20 @@ class ClientCompatibilityFeaturesTest(Test):
                                len(self.kafka.nodes),
                                list(self.topics.keys())[0]))
         for k, v in features.items():
-            cmd = cmd + ("--%s %s " % (k, v))
+            cmd = cmd + f"--{k} {v} "
         results_dir = TestContext.results_dir(self.test_context, 0)
         try:
             os.makedirs(results_dir)
         except OSError as e:
-            if e.errno == errno.EEXIST and os.path.isdir(results_dir):
-                pass
-            else:
+            if e.errno != errno.EEXIST or not os.path.isdir(results_dir):
                 raise
-        ssh_log_file = "%s/%s" % (results_dir, "client_compatibility_test_output.txt")
+        ssh_log_file = f"{results_dir}/client_compatibility_test_output.txt"
         try:
-          self.logger.info("Running %s" % cmd)
-          run_command(node, cmd, ssh_log_file)
+            self.logger.info(f"Running {cmd}")
+            run_command(node, cmd, ssh_log_file)
         except Exception as e:
-          self.logger.info("** Command failed.  See %s for log messages." % ssh_log_file)
-          raise
+            self.logger.info(f"** Command failed.  See {ssh_log_file} for log messages.")
+            raise
 
     @cluster(num_nodes=7)
     @matrix(broker_version=[str(DEV_BRANCH)], metadata_quorum=quorum.all_non_upgrade)

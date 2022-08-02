@@ -40,7 +40,6 @@ class FilesUnreadableFaultSpec(TaskSpec):
         self.message["prefix"] = prefix
         self.message["errorCode"] = error_code
 
-        self.kibosh_message = {}
-        self.kibosh_message["type"] = "unreadable"
+        self.kibosh_message = {"type": "unreadable"}
         self.kibosh_message["prefix"] = prefix
         self.kibosh_message["code"] = error_code

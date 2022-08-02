@@ -102,13 +102,13 @@ class ThrottlingTest(ProduceConsumeValidateTest):
         self.logger.debug("Partitions before reassignment:" +
                           str(partition_info))
         max_num_moves = 0
-        for i in range(0, self.num_partitions):
+        for i in range(self.num_partitions):
             old_replicas = set(partition_info["partitions"][i]["replicas"])
             new_part = (i+1) % self.num_partitions
             new_replicas = set(partition_info["partitions"][new_part]["replicas"])
             max_num_moves = max(len(new_replicas - old_replicas), max_num_moves)
             partition_info["partitions"][i]["partition"] = new_part
-        self.logger.debug("Jumbled partitions: " + str(partition_info))
+        self.logger.debug(f"Jumbled partitions: {str(partition_info)}")
 
         self.kafka.execute_reassign_partitions(partition_info,
                                                throttle=throttle)
@@ -134,7 +134,7 @@ class ThrottlingTest(ProduceConsumeValidateTest):
                           time_taken,
                           estimated_throttled_time)
         assert time_taken >= estimated_throttled_time * 0.9, \
-            ("Expected rebalance to take at least %ds, but it took %ds" % (
+                ("Expected rebalance to take at least %ds, but it took %ds" % (
                 estimated_throttled_time,
                 time_taken))
 

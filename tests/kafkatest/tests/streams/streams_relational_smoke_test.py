@@ -56,7 +56,7 @@ class StreamsRelationalSmokeTestService(StreamsTestBaseService):
         node.account.create_file(self.LOG4J_CONFIG_FILE,
                                  self.render("log4j_template.properties", log_file=self.LOG_FILE))
 
-        self.logger.info("Starting process on " + str(node.account))
+        self.logger.info(f"Starting process on {str(node.account)}")
         node.account.ssh(self.start_cmd(node))
 
         if len(self.pids(node)) == 0:

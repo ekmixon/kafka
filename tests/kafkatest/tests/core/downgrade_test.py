@@ -74,7 +74,7 @@ class TestDowngrade(EndToEndTest):
         self.consumer.start()
 
     def wait_until_rejoin(self):
-        for partition in range(0, self.PARTITIONS):
+        for partition in range(self.PARTITIONS):
             wait_until(lambda: len(self.kafka.isr_idx_list(self.topic, partition)) == self.REPLICATION_FACTOR, 
                     timeout_sec=60, backoff_sec=1, err_msg="Replicas did not rejoin the ISR in a reasonable amount of time")
 

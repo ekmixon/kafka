@@ -65,7 +65,7 @@ class ConsoleConsumerTest(Test):
 
         wait_until(lambda: self.consumer.alive(node),
             timeout_sec=20, backoff_sec=.2, err_msg="Consumer was too slow to start")
-        self.logger.info("consumer started in %s seconds " % str(time.time() - t0))
+        self.logger.info(f"consumer started in {str(time.time() - t0)} seconds ")
 
         # Verify that log output is happening
         wait_until(lambda: file_exists(node, ConsoleConsumer.LOG_FILE), timeout_sec=10,

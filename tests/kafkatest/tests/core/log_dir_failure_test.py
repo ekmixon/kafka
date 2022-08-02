@@ -36,7 +36,7 @@ def select_node(test, broker_type, topic):
     elif broker_type == "controller":
         node = test.kafka.controller()
     else:
-        raise Exception("Unexpected broker type %s." % (broker_type))
+        raise Exception(f"Unexpected broker type {broker_type}.")
 
     return node
 
@@ -123,17 +123,20 @@ class LogDirFailureTest(ProduceConsumeValidateTest):
             broker_node = select_node(self, broker_type, self.topic2)
             broker_idx = self.kafka.idx(broker_node)
             assert broker_idx in self.kafka.isr_idx_list(self.topic2), \
-                   "Broker %d should be in isr set %s" % (broker_idx, str(self.kafka.isr_idx_list(self.topic2)))
+                       "Broker %d should be in isr set %s" % (broker_idx, str(self.kafka.isr_idx_list(self.topic2)))
 
             # Verify that topic1 and the consumer offset topic is in the first log directory and topic2 is in the second log directory
-            topic_1_partition_0 = KafkaService.DATA_LOG_DIR_1 + "/test_topic_1-0"
-            topic_2_partition_0 = KafkaService.DATA_LOG_DIR_2 + "/test_topic_2-0"
-            offset_topic_partition_0 = KafkaService.DATA_LOG_DIR_1 + "/__consumer_offsets-0"
-            for path in [topic_1_partition_0, topic_2_partition_0, offset_topic_partition_0]:
-                assert path_exists(broker_node, path), "%s should exist" % path
+            topic_1_partition_0 = f"{KafkaService.DATA_LOG_DIR_1}/test_topic_1-0"
+            topic_2_partition_0 = f"{KafkaService.DATA_LOG_DIR_2}/test_topic_2-0"
+            offset_topic_partition_0 = (
+                f"{KafkaService.DATA_LOG_DIR_1}/__consumer_offsets-0"
+            )
 
-            self.logger.debug("Making log dir %s inaccessible" % (KafkaService.DATA_LOG_DIR_2))
-            cmd = "chmod a-w %s -R" % (KafkaService.DATA_LOG_DIR_2)
+            for path in [topic_1_partition_0, topic_2_partition_0, offset_topic_partition_0]:
+                assert path_exists(broker_node, path), f"{path} should exist"
+
+            self.logger.debug(f"Making log dir {KafkaService.DATA_LOG_DIR_2} inaccessible")
+            cmd = f"chmod a-w {KafkaService.DATA_LOG_DIR_2} -R"
             broker_node.account.ssh(cmd, allow_fail=False)
 
             if bounce_broker:
@@ -173,8 +176,10 @@ class LogDirFailureTest(ProduceConsumeValidateTest):
             self.consumer_start_timeout_sec = 90
             self.start_producer_and_consumer()
 
-            assert self.kafka.isr_idx_list(self.topic1) == [broker_idx], \
-                   "In-sync replicas of topic %s and partition 0 should be %s" % (self.topic1, str([broker_idx]))
+            assert self.kafka.isr_idx_list(self.topic1) == [
+                broker_idx
+            ], f"In-sync replicas of topic {self.topic1} and partition 0 should be {[broker_idx]}"
+
 
             self.stop_producer_and_consumer()
             self.validate()

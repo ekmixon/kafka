@@ -85,13 +85,10 @@ KafkaClient {
         return dt["hmac"]
 
     def parse_delegation_token_out(self):
-        cmd = "tail -1 %s" % self.delegation_token_out
+        cmd = f"tail -1 {self.delegation_token_out}"
 
         output_iter = self.node.account.ssh_capture(cmd, allow_fail=False)
-        output = ""
-        for line in output_iter:
-            output += line
-
+        output = "".join(output_iter)
         tokenid, hmac, owner, renewers, issuedate, expirydate, maxdate = output.split()
         return {"tokenid" : tokenid,
                 "hmac" : hmac,

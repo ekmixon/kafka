@@ -74,7 +74,7 @@ class ConsumerGroupCommandTest(Test):
         if security_protocol is not SecurityConfig.PLAINTEXT:
             prop_file = str(self.kafka.security_config.client_config())
             self.logger.debug(prop_file)
-            kafka_node.account.ssh("mkdir -p %s" % self.PERSISTENT_ROOT, allow_fail=False)
+            kafka_node.account.ssh(f"mkdir -p {self.PERSISTENT_ROOT}", allow_fail=False)
             kafka_node.account.create_file(self.COMMAND_CONFIG_FILE, prop_file)
 
         # Verify ConsumerGroupCommand lists expected consumer groups

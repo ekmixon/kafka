@@ -62,8 +62,9 @@ class TrogdorTest(Test):
         self.trogdor.create_task("myfault", spec)
         def check_for_myfault():
             faults = self.trogdor.tasks()["tasks"]
-            self.logger.info("tasks = %s" % faults)
+            self.logger.info(f"tasks = {faults}")
             return "myfault" in faults
+
         wait_until(lambda: check_for_myfault,
                    timeout_sec=10, backoff_sec=.2, err_msg="Failed to read back myfault.")
         self.trogdor.stop_task("myfault")
@@ -86,9 +87,8 @@ class TrogdorTest(Test):
                 return False
             if node_is_reachable(self.agent_nodes[1], self.agent_nodes[0]):
                 return False
-            if node_is_reachable(self.agent_nodes[2], self.agent_nodes[0]):
-                return False
-            return True
+            return not node_is_reachable(self.agent_nodes[2], self.agent_nodes[0])
+
         wait_until(lambda: verify_nodes_partitioned,
                    timeout_sec=10, backoff_sec=.2, err_msg="Failed to verify that the nodes were partitioned.")
         if not node_is_reachable(self.agent_nodes[0], self.agent_nodes[0]):

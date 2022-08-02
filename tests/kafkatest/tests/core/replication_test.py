@@ -33,7 +33,7 @@ def broker_node(test, broker_type):
     elif broker_type == "controller":
         node = test.kafka.controller()
     else:
-        raise Exception("Unexpected broker type %s." % (broker_type))
+        raise Exception(f"Unexpected broker type {broker_type}.")
 
     return node
 
@@ -52,31 +52,38 @@ def hard_shutdown(test, broker_type):
 
 def clean_bounce(test, broker_type):
     """Chase the leader of one partition and restart it cleanly."""
-    for i in range(5):
+    for _ in range(5):
         prev_broker_node = broker_node(test, broker_type)
         test.kafka.restart_node(prev_broker_node, clean_shutdown=True)
 
 
 def hard_bounce(test, broker_type):
     """Chase the leader and restart it with a hard kill."""
-    for i in range(5):
+    # Since this is a hard kill, we need to make sure the process is down and that
+    # zookeeper has registered the loss by expiring the broker's session timeout.
+    # Or, for a KRaft quorum, we simply wait at least 18 seconds (the default for broker.session.timeout.ms)
+
+    gracePeriodSecs = 5
+    for _ in range(5):
         prev_broker_node = broker_node(test, broker_type)
         test.kafka.signal_node(prev_broker_node, sig=signal.SIGKILL)
 
-        # Since this is a hard kill, we need to make sure the process is down and that
-        # zookeeper has registered the loss by expiring the broker's session timeout.
-        # Or, for a KRaft quorum, we simply wait at least 18 seconds (the default for broker.session.timeout.ms)
-
-        gracePeriodSecs = 5
         if test.zk:
-            wait_until(lambda: len(test.kafka.pids(prev_broker_node)) == 0 and not test.kafka.is_registered(prev_broker_node),
-                       timeout_sec=test.kafka.zk_session_timeout + gracePeriodSecs,
-                       err_msg="Failed to see timely deregistration of hard-killed broker %s" % str(prev_broker_node.account))
+            wait_until(
+                lambda: len(test.kafka.pids(prev_broker_node)) == 0
+                and not test.kafka.is_registered(prev_broker_node),
+                timeout_sec=test.kafka.zk_session_timeout + gracePeriodSecs,
+                err_msg=f"Failed to see timely deregistration of hard-killed broker {str(prev_broker_node.account)}",
+            )
+
         else:
             brokerSessionTimeoutSecs = 18
-            wait_until(lambda: len(test.kafka.pids(prev_broker_node)) == 0,
-                       timeout_sec=brokerSessionTimeoutSecs + gracePeriodSecs,
-                       err_msg="Failed to see timely disappearance of process for hard-killed broker %s" % str(prev_broker_node.account))
+            wait_until(
+                lambda: len(test.kafka.pids(prev_broker_node)) == 0,
+                timeout_sec=brokerSessionTimeoutSecs + gracePeriodSecs,
+                err_msg=f"Failed to see timely disappearance of process for hard-killed broker {str(prev_broker_node.account)}",
+            )
+
             time.sleep(brokerSessionTimeoutSecs + gracePeriodSecs)
 
         test.kafka.start_node(prev_broker_node)
@@ -172,7 +179,7 @@ class ReplicationTest(EndToEndTest):
                           controller_num_nodes_override = 1)
         self.kafka.start()
 
-        compression_types = None if not compression_type else [compression_type]
+        compression_types = [compression_type] if compression_type else None
         self.create_producer(compression_types=compression_types, enable_idempotence=enable_idempotence)
         self.producer.start()
 

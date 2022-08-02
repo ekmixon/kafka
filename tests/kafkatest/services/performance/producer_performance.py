@@ -55,8 +55,11 @@ class ProducerPerformanceService(HttpMetricsCollector, PerformanceService):
         self.security_config = kafka.security_config.client_config()
 
         security_protocol = self.security_config.security_protocol
-        assert version.consumer_supports_bootstrap_server() or security_protocol == SecurityConfig.PLAINTEXT, \
-            "Security protocol %s is only supported if version >= 0.9.0.0, version %s" % (self.security_config, str(version))
+        assert (
+            version.consumer_supports_bootstrap_server()
+            or security_protocol == SecurityConfig.PLAINTEXT
+        ), f"Security protocol {self.security_config} is only supported if version >= 0.9.0.0, version {str(version)}"
+
 
         self.args = {
             'topic': topic,
@@ -74,12 +77,19 @@ class ProducerPerformanceService(HttpMetricsCollector, PerformanceService):
 
     def start_cmd(self, node):
         args = self.args.copy()
-        args.update({
-            'bootstrap_servers': self.kafka.bootstrap_servers(self.security_config.security_protocol),
-            'client_id': self.client_id,
-            'kafka_run_class': self.path.script("kafka-run-class.sh", node),
-            'metrics_props': ' '.join("%s=%s" % (k, v) for k, v in self.http_metrics_client_configs.items())
-            })
+        args.update(
+            {
+                'bootstrap_servers': self.kafka.bootstrap_servers(
+                    self.security_config.security_protocol
+                ),
+                'client_id': self.client_id,
+                'kafka_run_class': self.path.script("kafka-run-class.sh", node),
+                'metrics_props': ' '.join(
+                    f"{k}={v}" for k, v in self.http_metrics_client_configs.items()
+                ),
+            }
+        )
+
 
         cmd = ""
 
@@ -90,28 +100,28 @@ class ProducerPerformanceService(HttpMetricsCollector, PerformanceService):
             tools_dependant_libs_jar = self.path.jar(TOOLS_DEPENDANT_TEST_LIBS_JAR_NAME, DEV_BRANCH)
 
             for jar in (tools_jar, tools_dependant_libs_jar):
-                cmd += "for file in %s; do CLASSPATH=$CLASSPATH:$file; done; " % jar
+                cmd += f"for file in {jar}; do CLASSPATH=$CLASSPATH:$file; done; "
             cmd += "export CLASSPATH; "
 
         cmd += " export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%s\"; " % ProducerPerformanceService.LOG4J_CONFIG
         cmd += "KAFKA_OPTS=%(kafka_opts)s KAFKA_HEAP_OPTS=\"-XX:+HeapDumpOnOutOfMemoryError\" %(kafka_run_class)s org.apache.kafka.tools.ProducerPerformance " \
-              "--topic %(topic)s --num-records %(num_records)d --record-size %(record_size)d --throughput %(throughput)d --producer-props bootstrap.servers=%(bootstrap_servers)s client.id=%(client_id)s %(metrics_props)s" % args
+                  "--topic %(topic)s --num-records %(num_records)d --record-size %(record_size)d --throughput %(throughput)d --producer-props bootstrap.servers=%(bootstrap_servers)s client.id=%(client_id)s %(metrics_props)s" % args
 
         self.security_config.setup_node(node)
         if self.security_config.security_protocol != SecurityConfig.PLAINTEXT:
             self.settings.update(self.security_config.properties)
 
         for key, value in self.settings.items():
-            cmd += " %s=%s" % (str(key), str(value))
+            cmd += f" {str(key)}={str(value)}"
 
-        cmd += " 2>>%s | tee %s" % (ProducerPerformanceService.STDERR_CAPTURE, ProducerPerformanceService.STDOUT_CAPTURE)
+        cmd += f" 2>>{ProducerPerformanceService.STDERR_CAPTURE} | tee {ProducerPerformanceService.STDOUT_CAPTURE}"
+
         return cmd
 
     def pids(self, node):
         try:
             cmd = "jps | grep -i ProducerPerformance | awk '{print $1}'"
-            pid_arr = [pid for pid in node.account.ssh_capture(cmd, allow_fail=True, callback=int)]
-            return pid_arr
+            return list(node.account.ssh_capture(cmd, allow_fail=True, callback=int))
         except (RemoteCommandError, ValueError) as e:
             return []
 
@@ -119,7 +129,11 @@ class ProducerPerformanceService(HttpMetricsCollector, PerformanceService):
         return len(self.pids(node)) > 0
 
     def _worker(self, idx, node):
-        node.account.ssh("mkdir -p %s" % ProducerPerformanceService.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(
+            f"mkdir -p {ProducerPerformanceService.PERSISTENT_ROOT}",
+            allow_fail=False,
+        )
+
 
         # Create and upload log properties
         log_config = self.render('tools_log4j.properties', log_file=ProducerPerformanceService.LOG_FILE)
@@ -139,11 +153,14 @@ class ProducerPerformanceService(HttpMetricsCollector, PerformanceService):
 
         wait_until(lambda: not self.alive(node), timeout_sec=1200, backoff_sec=2, err_msg="ProducerPerformance failed to finish")
         elapsed = time.time() - start
-        self.logger.debug("ProducerPerformance process ran for %s seconds" % elapsed)
+        self.logger.debug(f"ProducerPerformance process ran for {elapsed} seconds")
 
         # parse producer output from file
         last = None
-        producer_output = node.account.ssh_capture("cat %s" % ProducerPerformanceService.STDOUT_CAPTURE)
+        producer_output = node.account.ssh_capture(
+            f"cat {ProducerPerformanceService.STDOUT_CAPTURE}"
+        )
+
         for line in producer_output:
             if self.intermediate_stats:
                 try:

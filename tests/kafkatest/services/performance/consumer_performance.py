@@ -79,15 +79,22 @@ class ConsumerPerformanceService(PerformanceService):
         self.new_consumer = new_consumer
         self.settings = settings
 
-        assert version.consumer_supports_bootstrap_server() or (not new_consumer), \
-            "new_consumer is only supported if version >= 0.9.0.0, version %s" % str(version)
+        assert version.consumer_supports_bootstrap_server() or (
+            not new_consumer
+        ), f"new_consumer is only supported if version >= 0.9.0.0, version {str(version)}"
 
-        assert version < V_2_0_0 or new_consumer, \
-            "new_consumer==false is only supported if version < 2.0.0, version %s" % str(version)
+
+        assert (
+            version < V_2_0_0 or new_consumer
+        ), f"new_consumer==false is only supported if version < 2.0.0, version {str(version)}"
+
 
         security_protocol = self.security_config.security_protocol
-        assert version.consumer_supports_bootstrap_server() or security_protocol == SecurityConfig.PLAINTEXT, \
-            "Security protocol %s is only supported if version >= 0.9.0.0, version %s" % (self.security_config, str(version))
+        assert (
+            version.consumer_supports_bootstrap_server()
+            or security_protocol == SecurityConfig.PLAINTEXT
+        ), f"Security protocol {self.security_config} is only supported if version >= 0.9.0.0, version {str(version)}"
+
 
         # These less-frequently used settings can be updated manually after instantiation
         self.fetch_size = None
@@ -135,19 +142,19 @@ class ConsumerPerformanceService(PerformanceService):
         return args
 
     def start_cmd(self, node):
-        cmd = "export LOG_DIR=%s;" % ConsumerPerformanceService.LOG_DIR
-        cmd += " export KAFKA_OPTS=%s;" % self.security_config.kafka_opts
+        cmd = f"export LOG_DIR={ConsumerPerformanceService.LOG_DIR};"
+        cmd += f" export KAFKA_OPTS={self.security_config.kafka_opts};"
         cmd += " export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%s\";" % ConsumerPerformanceService.LOG4J_CONFIG
-        cmd += " %s" % self.path.script("kafka-consumer-perf-test.sh", node)
+        cmd += f' {self.path.script("kafka-consumer-perf-test.sh", node)}'
         for key, value in self.args(node.version).items():
-            cmd += " --%s %s" % (key, value)
+            cmd += f" --{key} {value}"
 
         if node.version.consumer_supports_bootstrap_server():
             # This is only used for security settings
-            cmd += " --consumer.config %s" % ConsumerPerformanceService.CONFIG_FILE
+            cmd += f" --consumer.config {ConsumerPerformanceService.CONFIG_FILE}"
 
         for key, value in self.settings.items():
-            cmd += " %s=%s" % (str(key), str(value))
+            cmd += f" {str(key)}={str(value)}"
 
         cmd += " 2>> %(stderr)s | tee -a %(stdout)s" % {'stdout': ConsumerPerformanceService.STDOUT_CAPTURE,
                                                         'stderr': ConsumerPerformanceService.STDERR_CAPTURE}
@@ -155,22 +162,26 @@ class ConsumerPerformanceService(PerformanceService):
 
     def parse_results(self, line, version):
         parts = line.split(',')
-        if version.consumer_supports_bootstrap_server():
-            result = {
+        return (
+            {
                 'total_mb': float(parts[2]),
                 'mbps': float(parts[3]),
                 'records_per_sec': float(parts[5]),
             }
-        else:
-            result = {
+            if version.consumer_supports_bootstrap_server()
+            else {
                 'total_mb': float(parts[3]),
                 'mbps': float(parts[4]),
                 'records_per_sec': float(parts[6]),
             }
-        return result
+        )
 
     def _worker(self, idx, node):
-        node.account.ssh("mkdir -p %s" % ConsumerPerformanceService.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(
+            f"mkdir -p {ConsumerPerformanceService.PERSISTENT_ROOT}",
+            allow_fail=False,
+        )
+
 
         log_config = self.render('tools_log4j.properties', log_file=ConsumerPerformanceService.LOG_FILE)
         node.account.create_file(ConsumerPerformanceService.LOG4J_CONFIG, log_config)

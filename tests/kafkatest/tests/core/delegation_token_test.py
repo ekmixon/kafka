@@ -51,7 +51,10 @@ sasl.mechanism=SCRAM-SHA-256
 sasl.kerberos.service.name=kafka
 client.id=console-consumer
 """
-        self.client_kafka_opts=' -Djava.security.auth.login.config=' + self.jaas_deleg_conf_path
+        self.client_kafka_opts = (
+            f' -Djava.security.auth.login.config={self.jaas_deleg_conf_path}'
+        )
+
 
         self.producer = VerifiableProducer(self.test_context, num_nodes=1, kafka=self.kafka, topic=self.topic, max_messages=1,
                                        throughput=1, kafka_opts_override=self.client_kafka_opts,

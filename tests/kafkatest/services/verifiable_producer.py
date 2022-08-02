@@ -115,7 +115,7 @@ class VerifiableProducer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
     def prop_file(self, node):
         idx = self.idx(node)
         prop_file = self.render('producer.properties', request_timeout_ms=(self.request_timeout_sec * 1000))
-        prop_file += "\n{}".format(str(self.security_config))
+        prop_file += f"\n{str(self.security_config)}"
         if self.compression_types is not None:
             compression_index = idx - 1
             self.logger.info("VerifiableProducer (index = %d) will use compression type = %s", idx,
@@ -124,7 +124,10 @@ class VerifiableProducer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
         return prop_file
 
     def _worker(self, idx, node):
-        node.account.ssh("mkdir -p %s" % VerifiableProducer.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(
+            f"mkdir -p {VerifiableProducer.PERSISTENT_ROOT}", allow_fail=False
+        )
+
 
         # Create and upload log properties
         log_config = self.render('tools_log4j.properties', log_file=VerifiableProducer.LOG_FILE)
@@ -136,11 +139,7 @@ class VerifiableProducer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
         self.security_config.setup_node(node)
 
         # Create and upload config file
-        if self.client_prop_file_override:
-            producer_prop_file = self.client_prop_file_override
-        else:
-            producer_prop_file = self.prop_file(node)
-
+        producer_prop_file = self.client_prop_file_override or self.prop_file(node)
         if self.acks is not None:
             self.logger.info("VerifiableProducer (index = %d) will use acks = %s", idx, self.acks)
             producer_prop_file += "\nacks=%s\n" % self.acks
@@ -195,8 +194,12 @@ class VerifiableProducer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
                         time_delta_sec = t - last_produced_time
                         if time_delta_sec > 2 and prev_msg is not None:
                             self.logger.debug(
-                                "Time delta between successively acked messages is large: " +
-                                "delta_t_sec: %s, prev_message: %s, current_message: %s" % (str(time_delta_sec), str(prev_msg), str(data)))
+                                (
+                                    "Time delta between successively acked messages is large: "
+                                    + f"delta_t_sec: {str(time_delta_sec)}, prev_message: {str(prev_msg)}, current_message: {str(data)}"
+                                )
+                            )
+
 
                         last_produced_time = t
                         prev_msg = data
@@ -215,32 +218,34 @@ class VerifiableProducer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
             return True
 
     def start_cmd(self, node, idx):
-        cmd  = "export LOG_DIR=%s;" % VerifiableProducer.LOG_DIR
+        cmd = f"export LOG_DIR={VerifiableProducer.LOG_DIR};"
         if self.kafka_opts_override:
             cmd += " export KAFKA_OPTS=\"%s\";" % self.kafka_opts_override
         else:
-            cmd += " export KAFKA_OPTS=%s;" % self.security_config.kafka_opts
+            cmd += f" export KAFKA_OPTS={self.security_config.kafka_opts};"
 
         cmd += fix_opts_for_new_jvm(node)
         cmd += " export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%s\"; " % VerifiableProducer.LOG4J_CONFIG
         cmd += self.impl.exec_cmd(node)
-        cmd += " --topic %s --broker-list %s" % (self.topic, self.kafka.bootstrap_servers(self.security_config.security_protocol, True, self.offline_nodes))
+        cmd += f" --topic {self.topic} --broker-list {self.kafka.bootstrap_servers(self.security_config.security_protocol, True, self.offline_nodes)}"
+
         if self.max_messages > 0:
-            cmd += " --max-messages %s" % str(self.max_messages)
+            cmd += f" --max-messages {str(self.max_messages)}"
         if self.throughput > 0:
-            cmd += " --throughput %s" % str(self.throughput)
+            cmd += f" --throughput {str(self.throughput)}"
         if self.message_validator == is_int_with_prefix:
-            cmd += " --value-prefix %s" % str(idx)
+            cmd += f" --value-prefix {str(idx)}"
         if self.acks is not None:
-            cmd += " --acks %s " % str(self.acks)
+            cmd += f" --acks {str(self.acks)} "
         if self.create_time > -1:
-            cmd += " --message-create-time %s " % str(self.create_time)
+            cmd += f" --message-create-time {str(self.create_time)} "
         if self.repeating_keys is not None:
-            cmd += " --repeating-keys %s " % str(self.repeating_keys)
+            cmd += f" --repeating-keys {str(self.repeating_keys)} "
 
-        cmd += " --producer.config %s" % VerifiableProducer.CONFIG_FILE
+        cmd += f" --producer.config {VerifiableProducer.CONFIG_FILE}"
 
-        cmd += " 2>> %s | tee -a %s &" % (VerifiableProducer.STDOUT_CAPTURE, VerifiableProducer.STDOUT_CAPTURE)
+        cmd += f" 2>> {VerifiableProducer.STDOUT_CAPTURE} | tee -a {VerifiableProducer.STDOUT_CAPTURE} &"
+
         return cmd
 
     def kill_node(self, node, clean_shutdown=True, allow_fail=False):
@@ -286,10 +291,11 @@ class VerifiableProducer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
 
     def each_produced_at_least(self, count):
         with self.lock:
-            for idx in range(1, self.num_nodes + 1):
-                if self.produced_count.get(idx) is None or self.produced_count[idx] < count:
-                    return False
-            return True
+            return not any(
+                self.produced_count.get(idx) is None
+                or self.produced_count[idx] < count
+                for idx in range(1, self.num_nodes + 1)
+            )
 
     def stop_node(self, node):
         # There is a race condition on shutdown if using `max_messages` since the
@@ -299,19 +305,19 @@ class VerifiableProducer(KafkaPathResolverMixin, VerifiableClientMixin, Backgrou
         self.kill_node(node, clean_shutdown=True, allow_fail=allow_fail)
 
         stopped = self.wait_node(node, timeout_sec=self.stop_timeout_sec)
-        assert stopped, "Node %s: did not stop within the specified timeout of %s seconds" % \
-                        (str(node.account), str(self.stop_timeout_sec))
+        assert (
+            stopped
+        ), f"Node {str(node.account)}: did not stop within the specified timeout of {str(self.stop_timeout_sec)} seconds"
 
     def clean_node(self, node):
         self.kill_node(node, clean_shutdown=False, allow_fail=False)
-        node.account.ssh("rm -rf " + self.PERSISTENT_ROOT, allow_fail=False)
+        node.account.ssh(f"rm -rf {self.PERSISTENT_ROOT}", allow_fail=False)
         self.security_config.clean_node(node)
 
     def try_parse_json(self, string):
         """Try to parse a string as json. Return None if not parseable."""
         try:
-            record = json.loads(string)
-            return record
+            return json.loads(string)
         except ValueError:
-            self.logger.debug("Could not parse as json: %s" % str(string))
+            self.logger.debug(f"Could not parse as json: {str(string)}")
             return None

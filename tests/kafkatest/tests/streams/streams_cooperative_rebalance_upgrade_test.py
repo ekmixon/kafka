@@ -119,19 +119,25 @@ class StreamsCooperativeRebalanceUpgradeTest(Test):
         # now verify tasks are unique
         for processor in processors:
             self.get_tasks_for_processor(processor)
-            self.logger.info("Active tasks %s" % processor.active_tasks)
+            self.logger.info(f"Active tasks {processor.active_tasks}")
 
         overlapping_tasks = processor1.active_tasks.intersection(processor2.active_tasks)
-        assert len(overlapping_tasks) == int(0), \
-            "Final task assignments are not unique %s %s" % (processor1.active_tasks, processor2.active_tasks)
+        assert (
+            len(overlapping_tasks) == 0
+        ), f"Final task assignments are not unique {processor1.active_tasks} {processor2.active_tasks}"
+
 
         overlapping_tasks = processor1.active_tasks.intersection(processor3.active_tasks)
-        assert len(overlapping_tasks) == int(0), \
-            "Final task assignments are not unique %s %s" % (processor1.active_tasks, processor3.active_tasks)
+        assert (
+            len(overlapping_tasks) == 0
+        ), f"Final task assignments are not unique {processor1.active_tasks} {processor3.active_tasks}"
+
 
         overlapping_tasks = processor2.active_tasks.intersection(processor3.active_tasks)
-        assert len(overlapping_tasks) == int(0), \
-            "Final task assignments are not unique %s %s" % (processor2.active_tasks, processor3.active_tasks)
+        assert (
+            len(overlapping_tasks) == 0
+        ), f"Final task assignments are not unique {processor2.active_tasks} {processor3.active_tasks}"
+
 
         # test done close all down
         stop_processors(processors, self.second_bounce_phase + self.stopped_message)
@@ -185,23 +191,30 @@ class StreamsCooperativeRebalanceUpgradeTest(Test):
                                               processor.node.account))
 
     def verify_processing(self, processor, pattern):
-        self.logger.info("Verifying %s processing pattern in STDOUT_FILE" % pattern)
+        self.logger.info(f"Verifying {pattern} processing pattern in STDOUT_FILE")
         with processor.node.account.monitor_log(processor.STDOUT_FILE) as monitor:
-            monitor.wait_until(pattern,
-                               timeout_sec=60,
-                               err_msg="Never saw processing of %s " % pattern + str(processor.node.account))
+            monitor.wait_until(
+                pattern,
+                timeout_sec=60,
+                err_msg=f"Never saw processing of {pattern} "
+                + str(processor.node.account),
+            )
 
     def get_tasks_for_processor(self, processor):
-        retries = 0
-        while retries < 5:
-            found_tasks = list(processor.node.account.ssh_capture("grep TASK-ASSIGNMENTS %s | tail -n 1" % processor.STDOUT_FILE, allow_fail=True))
-            self.logger.info("Returned %s from assigned task check" % found_tasks)
-            if len(found_tasks) > 0:
+        for _ in range(5):
+            found_tasks = list(
+                processor.node.account.ssh_capture(
+                    f"grep TASK-ASSIGNMENTS {processor.STDOUT_FILE} | tail -n 1",
+                    allow_fail=True,
+                )
+            )
+
+            self.logger.info(f"Returned {found_tasks} from assigned task check")
+            if found_tasks:
                 task_string = str(found_tasks[0]).strip()
-                self.logger.info("Converted %s from assigned task check" % task_string)
+                self.logger.info(f"Converted {task_string} from assigned task check")
                 processor.set_tasks(task_string)
                 return
-            retries += 1
             time.sleep(1)
         return
 
